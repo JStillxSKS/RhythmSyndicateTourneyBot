@@ -1,0 +1,13 @@
+﻿.env
+data/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+# large local mockup work (keep logo)
+assets/mockups/
+assets/mockups.zip
