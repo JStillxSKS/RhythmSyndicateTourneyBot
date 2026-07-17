@@ -18,6 +18,8 @@ Usage (from project root or bot/):
   python bot/playground.py
   python bot/playground.py --flood 5000
   python bot/playground.py --teams 40 --flood 2000
+
+Includes season-clock automation scenarios (open/close evaluate + test time scale).
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ import tempfile
 import threading
 import time
 import traceback
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +39,9 @@ if str(BOT_DIR) not in sys.path:
     sys.path.insert(0, str(BOT_DIR))
 
 import config  # noqa: E402
+from lifecycle import advance_to_next_week, close_week, open_week  # noqa: E402
 from rules import standings_rows, team_season_total, team_week_total  # noqa: E402
+from scheduler import evaluate_clock, in_scoring_window  # noqa: E402
 from scores import (  # noqa: E402
     approve_submission,
     find_submission_by_message_id,
@@ -50,6 +55,14 @@ from state import (  # noqa: E402
     new_team_id,
     save_state,
 )
+from timeclock import clock_now, ensure_test_origins  # noqa: E402
+
+try:
+    from zoneinfo import ZoneInfo
+
+    _PT = ZoneInfo("America/Los_Angeles")
+except Exception:
+    _PT = timezone(timedelta(hours=-8), name="PST")
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +210,100 @@ def scenario_message_dedupe(st: dict[str, Any]) -> None:
     )
     _assert(s3 is not None and s3["id"] != s1["id"], "new message new row")
     _ok("message_id dedupe (re-forward safe)")
+
+
+def scenario_auto_clock() -> None:
+    """Season automation: scoring window, evaluate open/close, test-time scale, lifecycle."""
+    # --- wall-clock window boundaries (fixed PT dates) ---
+    sat_open = datetime(2026, 7, 18, 10, 0, tzinfo=_PT)
+    sat_early = datetime(2026, 7, 18, 9, 59, tzinfo=_PT)
+    fri_almost = datetime(2026, 7, 24, 23, 58, tzinfo=_PT)
+    fri_close = datetime(2026, 7, 24, 23, 59, tzinfo=_PT)
+    _assert(in_scoring_window(sat_open), "Sat 10:00 in window")
+    _assert(not in_scoring_window(sat_early), "Sat 9:59 out of window")
+    _assert(in_scoring_window(fri_almost), "Fri 23:58 still in window")
+    _assert(not in_scoring_window(fri_close), "Fri 23:59 closed window")
+    _ok("scoring window boundaries")
+
+    # --- pure evaluate_clock ---
+    st = empty_state()
+    st["weeks"]["1"]["status"] = "scheduled"
+    _assert(
+        evaluate_clock(st, now=datetime(2026, 7, 18, 10, 5, tzinfo=_PT)) == "open",
+        "scheduled + Sat → open",
+    )
+    st["weeks"]["1"]["status"] = "open"
+    _assert(
+        evaluate_clock(st, now=datetime(2026, 7, 18, 10, 5, tzinfo=_PT)) is None,
+        "already open → no action",
+    )
+    _assert(
+        evaluate_clock(st, now=datetime(2026, 7, 24, 23, 59, tzinfo=_PT)) == "close",
+        "open + Fri 23:59 → close",
+    )
+    st["weeks"]["1"]["status"] = "closed"
+    _assert(
+        evaluate_clock(st, now=datetime(2026, 7, 24, 23, 59, tzinfo=_PT)) is None,
+        "already closed → no reopen same window",
+    )
+    _ok("evaluate_clock open/close")
+
+    # --- test time: 1 real min = 1 virtual hour ---
+    prev_test = config.RS_TEST_TIME
+    prev_scale = config.RS_TEST_VHOURS_PER_RMIN
+    config.RS_TEST_TIME = True
+    config.RS_TEST_VHOURS_PER_RMIN = 1.0
+    try:
+        st2 = empty_state()
+        real0 = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ensure_test_origins(st2, anchor="before_open", real_now=real0)
+        st2["weeks"]["1"]["status"] = "scheduled"
+        v0 = clock_now(st2, real_now=real0)
+        _assert(v0.hour == 9 and v0.minute == 50, f"before_open virt {v0}")
+        # +10 real minutes → virtual 19:50 same Sat (still before open? wait 9:50+10h=19:50 Sat still in window after 10)
+        real_mid = real0 + timedelta(minutes=10)
+        v_mid = clock_now(st2, real_now=real_mid)
+        _assert(v_mid.hour == 19 and v_mid.minute == 50, f"scale +10min → {v_mid}")
+        # +15 real min from 9:50 → 00:50 Sunday? 9:50+15h = 00:50 next day — actually 9:50+15=24:50 → Sun 00:50
+        # open decision: need virtual past Sat 10:00 while still scheduled
+        real_open = real0 + timedelta(minutes=15)  # virt 00:50 Sun — still in window
+        action = evaluate_clock(st2, now=clock_now(st2, real_now=real_open))
+        _assert(action == "open", f"test clock should open got {action}")
+        open_week(st2, now=real_open)
+        _assert(st2["weeks"]["1"]["status"] == "open", "lifecycle open_week")
+        _assert((st2.get("auto") or {}).get("last_open_week") == 1, "auto last_open_week")
+
+        # jump to before_close and close
+        ensure_test_origins(st2, anchor="before_close", real_now=real0)
+        st2["weeks"]["1"]["status"] = "open"
+        # +10 real min from Fri 23:50 → Sat 09:50 next? 23:50+10h = 09:50 Sat — after Fri close
+        real_after_close = real0 + timedelta(minutes=10)
+        action_c = evaluate_clock(st2, now=clock_now(st2, real_now=real_after_close))
+        _assert(action_c == "close", f"test clock should close got {action_c}")
+        close_week(st2, advance=False, now=real_after_close)
+        _assert(st2["weeks"]["1"]["status"] == "closed", "lifecycle close_week")
+        nxt = advance_to_next_week(st2, from_week=1)
+        _assert(nxt == 2, f"advance to week 2 got {nxt}")
+        _assert(st2["season"]["current_week"] == 2, "season.current_week advanced")
+        _assert(st2["weeks"]["2"]["status"] == "scheduled", "next week scheduled")
+        _ok("test-time scale + open/close lifecycle")
+    finally:
+        config.RS_TEST_TIME = prev_test
+        config.RS_TEST_VHOURS_PER_RMIN = prev_scale
+
+    # --- team import smoke (automation ops path) ---
+    from team_import import import_teams
+
+    st3 = empty_state()
+    csv = (
+        "team_name,division,captain_id,teammate_id\n"
+        "PG Auto A,classic,900001,900002\n"
+        "PG Auto B,fusion,900003,900004\n"
+    )
+    ok, err = import_teams(st3, csv)
+    _assert(len(ok) == 2 and not err, f"import {ok} {err}")
+    _assert(len(st3["teams"]) == 2, "two teams imported")
+    _ok("team import for auto season setup")
 
 
 def scenario_closed_pending_approve(st: dict[str, Any]) -> None:
@@ -520,6 +627,7 @@ def run_playground(*, teams_per_div: int, flood: int, skip_threads: bool) -> int
               f"({teams_per_div}/div × 3) + 1 inactive")
 
         scenarios = [
+            ("auto clock / test-time", lambda: scenario_auto_clock()),
             ("embed parse", lambda: scenario_embed_parse()),
             ("basic open week", lambda: scenario_basic_open_week(st)),
             ("unregistered/zero/inactive", lambda: scenario_unregistered_and_zero(st)),
