@@ -10,7 +10,31 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Bump on every deploy-critical fix so /tourney help proves which build is live.
-BOT_VERSION = "2026-07-16-golive-v1"
+BOT_VERSION = "2026-07-16-auto-v2"
+
+# Automation (env: "0"/"false"/"off" to disable)
+def _env_bool(name: str, default: bool = True) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+RS_AUTO_WEEK = _env_bool("RS_AUTO_WEEK", True)
+RS_AUTO_ANNOUNCE = _env_bool("RS_AUTO_ANNOUNCE", True)
+RS_AUTO_DIGEST = _env_bool("RS_AUTO_DIGEST", True)
+RS_BOARD_THROTTLE_SEC = int(os.getenv("RS_BOARD_THROTTLE_SEC") or "45")
+
+# Test time: 1 real minute = RS_TEST_VHOURS_PER_RMIN virtual hours (default 1)
+RS_TEST_TIME = _env_bool("RS_TEST_TIME", False)
+try:
+    RS_TEST_VHOURS_PER_RMIN = float(os.getenv("RS_TEST_VHOURS_PER_RMIN") or "1")
+except ValueError:
+    RS_TEST_VHOURS_PER_RMIN = 1.0
+
+# Tick: faster when test time is on
+_default_tick = "10" if RS_TEST_TIME else "45"
+RS_SCHEDULER_TICK_SEC = int(os.getenv("RS_SCHEDULER_TICK_SEC") or _default_tick)
 
 BOT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BOT_DIR.parent

@@ -89,7 +89,25 @@ def render_hero_banner(
     headline: str | None = None,
     kicker: str = "RHYTHM SYNDICATE PRESENTS",
 ) -> bytes:
-    """Stadium / hero announcement banner (mockup 02 energy)."""
+    """Stadium / hero announcement banner — **mockup 02 HTML** first, Pillow fallback."""
+    try:
+        from render_html import render_hero_mockup_png
+
+        png = render_hero_mockup_png(
+            week=week,
+            season=season,
+            status=status,
+            song=song,
+            deadline=deadline,
+            burden=burden,
+            headline=headline,
+            kicker=kicker.title() if kicker.isupper() else kicker,
+        )
+        if png:
+            return png
+    except Exception as e:
+        print(f"Mockup hero HTML path failed, Pillow fallback: {e}")
+
     w, h = 960, 420
     img = Image.new("RGB", (w, h), BLACK)
     draw = ImageDraw.Draw(img, "RGBA")

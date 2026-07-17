@@ -12,6 +12,9 @@ from config import (
     DIVISION_LABELS,
     DIVISIONS,
     RS_ADMIN_ROLE_IDS,
+    RS_AUTO_ANNOUNCE,
+    RS_AUTO_DIGEST,
+    RS_AUTO_WEEK,
     RS_CHANNEL_ID,
     RS_GUILD_ID,
     RS_SUBMIT_CHANNEL_ID,
@@ -24,7 +27,7 @@ from dashboard import (
     build_week_status_embed,
     logo_file,
 )
-from deadline import default_week_close_utc
+from lifecycle import close_week, open_week, refresh_public_boards, season_status_text
 from render_banners import hero_discord_file, render_hero_from_state
 from render_versus import (
     STYLE_LABELS,
@@ -40,6 +43,7 @@ from state import (
     new_team_id,
     normalize_division,
 )
+from team_import import import_teams
 from theme import HERO_ATTACHMENT_NAME, VERSE_ATTACHMENT_NAME, files_for_embeds
 
 GetState = Callable[[], dict]
@@ -92,16 +96,7 @@ def register_admin_commands(
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         state = get_state()
-        week_n = int(week or state.get("season", {}).get("current_week") or 1)
-        state["season"]["current_week"] = week_n
-        w = get_week(state, week_n)
-        now = datetime.now(timezone.utc)
-        w["status"] = "open"
-        w["open_at"] = now.isoformat()
-        if not w.get("close_at"):
-            w["close_at"] = default_week_close_utc(now).isoformat()
-        save_state(state)
-
+        _w, week_n = open_week(state, week)
         confirm = build_week_status_embed(state, week_n, opened=True)
         files = files_for_embeds()
         if files:
@@ -113,6 +108,10 @@ def register_admin_commands(
             channel = await _resolve_channel(bot, interaction)
             if channel:
                 await _post_week_announce(channel, state, style="week_open")
+        try:
+            await refresh_public_boards(bot, state, force=True)
+        except Exception as e:
+            print(f"Board refresh after week open: {e}")
 
     @week_grp.command(name="close", description="Close the current (or given) week")
     @admin_check()
@@ -127,13 +126,7 @@ def register_admin_commands(
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         state = get_state()
-        week_n = int(week or state.get("season", {}).get("current_week") or 1)
-        w = get_week(state, week_n)
-        w["status"] = "closed"
-        if not w.get("close_at"):
-            w["close_at"] = datetime.now(timezone.utc).isoformat()
-        save_state(state)
-
+        _w, week_n = close_week(state, week, advance=False)
         confirm = build_week_status_embed(state, week_n, opened=False)
         files = files_for_embeds()
         if files:
@@ -145,6 +138,10 @@ def register_admin_commands(
             channel = await _resolve_channel(bot, interaction)
             if channel:
                 await _post_week_announce(channel, state, style="week_close")
+        try:
+            await refresh_public_boards(bot, state, force=True)
+        except Exception as e:
+            print(f"Board refresh after week close: {e}")
 
     # --- song ---
     song_grp = app_commands.Group(name="song", description="Set featured song", parent=rs)
@@ -202,22 +199,20 @@ def register_admin_commands(
                 "No tourney channel (set `RS_CHANNEL_ID` or run in a guild channel)."
             )
             return
-        embeds = build_standings_embeds(state)
+        embeds = build_standings_embeds(state, with_image=True)
         msg_id = state.get("standings_message_id")
         msg = None
-        file = logo_file()
+        files = _standings_files(state)
         if msg_id:
             try:
                 msg = await channel.fetch_message(int(msg_id))
-                if file:
-                    await msg.edit(content=None, embeds=embeds, attachments=[file])
-                else:
-                    await msg.edit(content=None, embeds=embeds, attachments=[])
+                await msg.edit(content=None, embeds=embeds, attachments=files or [])
             except (discord.NotFound, discord.HTTPException, ValueError):
                 msg = None
         if msg is None:
-            if file:
-                msg = await channel.send(embeds=embeds, file=file)
+            files = _standings_files(state)  # fresh Files after failed edit
+            if files:
+                msg = await channel.send(embeds=embeds, files=files)
             else:
                 msg = await channel.send(embeds=embeds)
             state["standings_message_id"] = str(msg.id)
@@ -348,6 +343,35 @@ def register_admin_commands(
             await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
         else:
             await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @team_grp.command(name="import", description="Bulk import teams (CSV or JSON text)")
+    @admin_check()
+    @app_commands.describe(
+        data="CSV with header team_name,division,captain_id,teammate_id — or JSON array",
+    )
+    async def team_import_cmd(interaction: discord.Interaction, data: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        state = get_state()
+        try:
+            ok, err = import_teams(state, data)
+        except Exception as e:
+            await interaction.followup.send(f"Import parse failed: `{e}`")
+            return
+        if ok:
+            save_state(state)
+        lines = []
+        if ok:
+            lines.append(f"**Added {len(ok)}:**\n" + "\n".join(ok[:30]))
+            if len(ok) > 30:
+                lines.append(f"… +{len(ok) - 30} more")
+        if err:
+            lines.append(f"**Errors {len(err)}:**\n" + "\n".join(err[:20]))
+        if not lines:
+            lines.append("Nothing imported.")
+        text = "\n\n".join(lines)
+        if len(text) > 1900:
+            text = text[:1900] + "…"
+        await interaction.followup.send(text)
 
     @team_grp.command(name="list", description="List registered teams")
     @admin_check()
@@ -489,23 +513,20 @@ def register_admin_commands(
         if not channel:
             await interaction.followup.send("No tourney channel (set `RS_CHANNEL_ID`).")
             return
-        embed = build_dashboard_embed(state)
+        embed = build_dashboard_embed(state, with_image=True)
         msg_id = state.get("dashboard_message_id")
         msg = None
+        files = _dashboard_files(state)
         if msg_id:
             try:
                 msg = await channel.fetch_message(int(msg_id))
-                file = logo_file()
-                if file:
-                    await msg.edit(embed=embed, attachments=[file])
-                else:
-                    await msg.edit(embed=embed, attachments=[])
+                await msg.edit(embed=embed, attachments=files or [])
             except (discord.NotFound, discord.HTTPException, ValueError):
                 msg = None
         if msg is None:
-            file = logo_file()
-            if file:
-                msg = await channel.send(embed=embed, file=file)
+            files = _dashboard_files(state)
+            if files:
+                msg = await channel.send(embed=embed, files=files)
             else:
                 msg = await channel.send(embed=embed)
             state["dashboard_message_id"] = str(msg.id)
@@ -573,6 +594,75 @@ def register_admin_commands(
         pin_note = await _try_pin(msg) if pin else ""
         await interaction.followup.send(f"Calendar posted in {channel.mention}.{pin_note}")
 
+    # --- season status ---
+    season_grp = app_commands.Group(name="season", description="Season overview", parent=rs)
+
+    @season_grp.command(name="status", description="Auto clock, song queue, current week")
+    @admin_check()
+    async def season_status(interaction: discord.Interaction) -> None:
+        state = get_state()
+        text = season_status_text(state, auto_week=RS_AUTO_WEEK)
+        embed = build_admin_ok_embed("Season status", text)
+        file = logo_file()
+        if file:
+            await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @season_grp.command(
+        name="test-reset",
+        description="TEST clock only: jump virtual time (before open / mid / before close)",
+    )
+    @admin_check()
+    @app_commands.describe(
+        anchor="Where to put the virtual clock",
+        reset_week_status="Set current week to scheduled (before_open) or open (mid/before_close)",
+    )
+    @app_commands.choices(
+        anchor=[
+            app_commands.Choice(name="before open (Sat 9:50) — open in ~10 real min", value="before_open"),
+            app_commands.Choice(name="mid week (Wed noon)", value="mid_week"),
+            app_commands.Choice(name="before close (Fri 23:50) — close in ~9 real min", value="before_close"),
+        ]
+    )
+    async def season_test_reset(
+        interaction: discord.Interaction,
+        anchor: app_commands.Choice[str],
+        reset_week_status: bool = True,
+    ) -> None:
+        from config import RS_TEST_TIME
+        from timeclock import clock_now, ensure_test_origins
+
+        if not RS_TEST_TIME:
+            await interaction.response.send_message(
+                "Test clock is **OFF**. Set env `RS_TEST_TIME=1` and restart the bot "
+                "(1 real minute = 1 virtual hour).",
+                ephemeral=True,
+            )
+            return
+        state = get_state()
+        a = anchor.value  # type: ignore[assignment]
+        ensure_test_origins(state, anchor=a)  # type: ignore[arg-type]
+        if reset_week_status:
+            week_n = int(state.get("season", {}).get("current_week") or 1)
+            w = get_week(state, week_n)
+            if a == "before_open":
+                w["status"] = "scheduled"
+            else:
+                w["status"] = "open"
+        save_state(state)
+        virt = clock_now(state)
+        embed = build_admin_ok_embed(
+            "Test clock reset",
+            f"Anchor **{a}**\nVirtual now: `{virt.strftime('%a %Y-%m-%d %H:%M %Z')}`\n"
+            f"Scale: **1 real min = 1 virtual hour** (override with `RS_TEST_VHOURS_PER_RMIN`)",
+        )
+        file = logo_file()
+        if file:
+            await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
     # --- where (diagnostics) ---
     @rs.command(name="where", description="Show bot config / build (staff diagnostic)")
     @admin_check()
@@ -583,6 +673,7 @@ def register_admin_commands(
         w = get_week(state, int(week_n or 1))
         lines = [
             f"**BOT_VERSION:** `{BOT_VERSION}`",
+            f"**AUTO_WEEK:** {RS_AUTO_WEEK} · **ANNOUNCE:** {RS_AUTO_ANNOUNCE} · **DIGEST:** {RS_AUTO_DIGEST}",
             f"**Guild env:** `{RS_GUILD_ID}`",
             f"**Channel env:** `{RS_CHANNEL_ID}`",
             f"**Submit env:** `{RS_SUBMIT_CHANNEL_ID}`",
@@ -796,34 +887,77 @@ async def _post_announce(
     hero_file = None
     if use_hero:
         try:
-            mode = "burden" if style == "burden" else "week"
-            if style == "default":
-                mode = "announce"
-            png = render_hero_from_state(state, mode=mode)
-            # Force closed visual for week_close
-            if style == "week_close":
-                from render_banners import render_hero_banner
-                from config import CAPTAIN_BURDEN_WEEK
-                from state import get_week
+            from config import CAPTAIN_BURDEN_WEEK
+            from state import get_week
 
-                week_n = int(state.get("season", {}).get("current_week") or 1)
-                week = get_week(state, week_n)
-                song = week.get("song_title")
-                if song and week.get("song_artist"):
-                    song = f"{song} — {week['song_artist']}"
+            week_n = int(state.get("season", {}).get("current_week") or 1)
+            week = get_week(state, week_n)
+            song = week.get("song_title")
+            if song and week.get("song_artist"):
+                song = f"{song} — {week['song_artist']}"
+            season = (state.get("season") or {}).get("name") or "Season 1"
+
+            # Prefer mockup HTML pipeline (same CSS as concept cards)
+            if style == "burden" or (week_n == CAPTAIN_BURDEN_WEEK and style == "week_open"):
+                try:
+                    from render_html import render_cinematic_mockup_png
+
+                    png = render_cinematic_mockup_png(
+                        headline="Captain's Burden",
+                        accent=f"Week {week_n}",
+                        body=message[:220],
+                        cta="Standings live",
+                        cta_sub=f"RS · {season} finale window",
+                    )
+                except Exception:
+                    png = None
+                if not png:
+                    png = render_hero_from_state(state, mode="burden")
+            elif style == "week_close":
+                from render_banners import render_hero_banner
+
                 png = render_hero_banner(
                     week=week_n,
-                    season=(state.get("season") or {}).get("name") or "Season 1",
+                    season=season,
                     status="closed",
                     song=song,
                     deadline=None,
                     burden=week_n == CAPTAIN_BURDEN_WEEK,
                 )
-            hero_file = hero_discord_file(png, HERO_ATTACHMENT_NAME)
-            # Attach hero as image in embed
-            embed.set_image(url=f"attachment://{HERO_ATTACHMENT_NAME}")
+            elif style == "default":
+                # Mockup 01 embed-classic card as the image
+                try:
+                    from render_html import render_embed_mockup_png
+
+                    st_chip = (
+                        "OPEN"
+                        if (week.get("status") or "") == "open"
+                        else "CLOSED"
+                        if (week.get("status") or "") == "closed"
+                        else "UPDATE"
+                    )
+                    png = render_embed_mockup_png(
+                        title="Season 1 is",
+                        title_accent="LIVE",
+                        body=message[:280],
+                        chips=[
+                            (f"Week {week_n}", True),
+                            (st_chip, False),
+                            ("Classic · Fusion · Arcade", False),
+                        ],
+                    )
+                except Exception:
+                    png = None
+                if not png:
+                    png = render_hero_from_state(state, mode="announce")
+            else:
+                png = render_hero_from_state(state, mode="week")
+
+            if png:
+                hero_file = hero_discord_file(png, HERO_ATTACHMENT_NAME)
+                embed.set_image(url=f"attachment://{HERO_ATTACHMENT_NAME}")
         except Exception as e:
-            print(f"Hero banner render failed: {e}")
+            print(f"Hero / mockup banner render failed: {e}")
             hero_file = None
 
     files = files_for_embeds(hero_file)
@@ -860,3 +994,31 @@ async def _try_pin(msg: discord.Message) -> str:
     except discord.HTTPException as e:
         # Already pinned or pin cap
         return f" (pin skipped: {e})"
+
+
+def _dashboard_files(state: dict) -> list[discord.File]:
+    """Logo + ops strip PNG for living dashboard."""
+    from render_boards import board_discord_file, render_ops_from_state
+    from theme import DASH_STRIP_NAME
+
+    extras: list[discord.File | None] = []
+    try:
+        png = render_ops_from_state(state)
+        extras.append(board_discord_file(png, DASH_STRIP_NAME))
+    except Exception as e:
+        print(f"Dashboard strip render failed: {e}")
+    return files_for_embeds(*extras)
+
+
+def _standings_files(state: dict) -> list[discord.File]:
+    """Logo + standings board PNG."""
+    from render_boards import board_discord_file, render_standings_from_state
+    from theme import STANDINGS_ATTACHMENT_NAME
+
+    extras: list[discord.File | None] = []
+    try:
+        png = render_standings_from_state(state)
+        extras.append(board_discord_file(png, STANDINGS_ATTACHMENT_NAME))
+    except Exception as e:
+        print(f"Standings board render failed: {e}")
+    return files_for_embeds(*extras)

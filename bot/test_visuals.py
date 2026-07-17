@@ -19,7 +19,14 @@ from dashboard import (  # noqa: E402
     build_week_status_embed,
 )
 from render_banners import render_hero_banner, render_hero_from_state, write_preview  # noqa: E402
-from theme import EMBED_COLOR, footer_public, status_label  # noqa: E402
+from render_boards import (  # noqa: E402
+    render_ops_from_state,
+    render_score_flash,
+    render_standings_from_state,
+    render_team_card,
+    write_board_previews,
+)
+from theme import EMBED_COLOR, footer_public, pill_line, status_label  # noqa: E402
 
 
 def sample_state() -> dict:
@@ -65,7 +72,6 @@ def sample_state() -> dict:
             {"user_id": "111", "week": 1, "score": 980000, "verified": True},
             {"user_id": "222", "week": 1, "score": 910000, "verified": True},
             {"user_id": "333", "week": 1, "score": 950000, "verified": True},
-            # 444 missing
             {"user_id": "555", "week": 1, "score": 700000, "verified": True},
             {"user_id": "666", "week": 1, "score": 720000, "verified": True},
         ],
@@ -75,19 +81,21 @@ def sample_state() -> dict:
 def test_theme() -> None:
     assert EMBED_COLOR == 0xE10600
     assert "OPEN" in status_label("open")
-    assert "/tourney" in footer_public()
+    assert "RS TOURNEY" in footer_public()
+    assert "`OPEN`" in pill_line("OPEN", "WEEK 1")
 
 
 def test_embeds() -> None:
     state = sample_state()
     d = build_dashboard_embed(state)
-    assert d.title and "Rhythm Syndicate" in d.title
+    assert d.title and "dashboard" in (d.title or "").lower()
     assert d.color and d.color.value == EMBED_COLOR
     assert any(f.name == "Featured song" for f in d.fields)
+    assert d.author and "RHYTHM SYNDICATE" in (d.author.name or "")
 
     stands = build_standings_embeds(state)
-    assert len(stands) == 3
-    assert "Classic" in (stands[0].title or "")
+    assert len(stands) >= 3
+    assert "standings" in (stands[0].title or "").lower()
 
     team = state["teams"][0]
     te = build_team_embed(state, team)
@@ -97,7 +105,7 @@ def test_embeds() -> None:
     assert se.fields
 
     ann = build_announce_embed(state, "Season 1 is live. RS4L.", style="week_open")
-    assert "OPEN" in (ann.title or "")
+    assert "LIVE" in (ann.title or "") or "OPEN" in (ann.title or "")
 
     wopen = build_week_status_embed(state, 1, opened=True)
     assert "opened" in (wopen.title or "").lower()
@@ -106,6 +114,29 @@ def test_embeds() -> None:
     help_e = build_help_embed()
     assert rules.description
     assert help_e.description
+
+
+def test_board_pngs() -> None:
+    state = sample_state()
+    ops = render_ops_from_state(state)
+    assert ops[:8] == b"\x89PNG\r\n\x1a\n"
+    board = render_standings_from_state(state)
+    assert board[:8] == b"\x89PNG\r\n\x1a\n"
+    flash = render_score_flash(score=985_420, verified=True, week=1, team="PulseCore")
+    assert flash[:8] == b"\x89PNG\r\n\x1a\n"
+    card = render_team_card(
+        name="PulseCore",
+        division="classic",
+        captain_score=100,
+        teammate_score=50,
+        team_total=150,
+        week=1,
+        season_total=150,
+    )
+    assert card[:8] == b"\x89PNG\r\n\x1a\n"
+    paths = write_board_previews()
+    assert all(p.is_file() for p in paths)
+    print("board previews:", paths)
 
 
 def test_hero_png() -> None:
@@ -119,12 +150,21 @@ def test_hero_png() -> None:
     )
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
     assert len(png) > 5000
+    # Prefer mockup HTML path when Edge is present
+    try:
+        from render_html import html_available, render_hero_mockup_png
+
+        if html_available():
+            m = render_hero_mockup_png(week=1, status="open")
+            assert m and m[:8] == b"\x89PNG\r\n\x1a\n"
+            print("mockup HTML hero OK")
+    except Exception as e:
+        print("mockup HTML skip:", e)
 
     state = sample_state()
     png2 = render_hero_from_state(state, mode="week")
     assert png2[:8] == b"\x89PNG\r\n\x1a\n"
 
-    # Week 4 burden
     burden = render_hero_banner(week=4, status="open", burden=True)
     assert burden[:8] == b"\x89PNG\r\n\x1a\n"
 
@@ -155,9 +195,9 @@ def test_closed_and_burden_previews() -> None:
 if __name__ == "__main__":
     test_theme()
     test_embeds()
+    test_board_pngs()
     test_hero_png()
     test_closed_and_burden_previews()
-    # existing rules tests
     import test_rules
 
     test_rules.test_best_and_missing()

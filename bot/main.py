@@ -89,6 +89,21 @@ async def on_ready() -> None:
     except Exception as e:
         print(f"Command sync failed: {e}")
 
+    # Automation: heal missed open/close if bot was offline
+    try:
+        from scheduler import catch_up_once
+
+        await catch_up_once(client, get_state)
+    except Exception as e:
+        print(f"AUTO catch-up failed: {e}")
+
+    # Start season clock once
+    if not getattr(client, "_rs_scheduler_started", False):
+        client._rs_scheduler_started = True  # type: ignore[attr-defined]
+        from scheduler import scheduler_loop
+
+        client.loop.create_task(scheduler_loop(client, get_state))
+
 
 @client.event
 async def on_message(message: discord.Message) -> None:
@@ -132,41 +147,68 @@ async def on_message(message: discord.Message) -> None:
         },
     )
     from dashboard import build_submission_reply_embed, logo_file
+    from theme import SCORE_FLASH_NAME, files_for_embeds
 
     status = status + mode_note
+    verified = bool(sub and sub.get("verified"))
+    score_val = int((sub or {}).get("score") or data.get("score") or 0)
+    week_val = int((sub or {}).get("week") or state.get("season", {}).get("current_week") or 0) or None
 
     if sub is None:
         try:
             await message.add_reaction("❓")
-            embed = build_submission_reply_embed(
-                verified=False,
-                status_text=status,
-                score=int(data.get("score") or 0) or None,
-            )
-            file = logo_file()
-            if file:
-                await message.reply(embed=embed, file=file, mention_author=False)
-            else:
-                await message.reply(embed=embed, mention_author=False)
         except discord.HTTPException:
             pass
-        return
+        verified = False
+    else:
+        try:
+            await message.add_reaction("✅" if verified else "⏳")
+        except discord.HTTPException:
+            pass
 
     try:
-        await message.add_reaction("✅" if sub.get("verified") else "⏳")
         embed = build_submission_reply_embed(
-            verified=bool(sub.get("verified")),
+            verified=verified if sub is not None else False,
             status_text=status,
-            score=int(sub.get("score") or 0),
-            week=int(sub.get("week") or 0) or None,
+            score=score_val or None,
+            week=week_val,
         )
-        file = logo_file()
-        if file:
-            await message.reply(embed=embed, file=file, mention_author=False)
+        files: list = []
+        try:
+            from render_boards import board_discord_file, render_score_flash
+
+            png = render_score_flash(
+                score=score_val or 0,
+                verified=bool(sub and sub.get("verified")),
+                week=int(week_val or 1),
+                player=(data.get("playerName") or message.author.display_name),
+                team=(team.get("name") if team else None),
+                mode_note="Mode ≠ division — staff may review" if mode_note else None,
+            )
+            embed.set_image(url=f"attachment://{SCORE_FLASH_NAME}")
+            files = files_for_embeds(board_discord_file(png, SCORE_FLASH_NAME))
+        except Exception as e:
+            print(f"Score flash render failed: {e}")
+            lf = logo_file()
+            if lf:
+                files = [lf]
+        if files:
+            await message.reply(embed=embed, files=files, mention_author=False)
         else:
             await message.reply(embed=embed, mention_author=False)
     except discord.HTTPException:
         pass
+
+    # Auto-refresh public boards after a verified score (throttled)
+    if sub and sub.get("verified"):
+        try:
+            from lifecycle import refresh_public_boards
+
+            note = await refresh_public_boards(client, get_state(), force=False)
+            if note not in ("throttled", "no_channel", "no_messages"):
+                print(f"AUTO board refresh after score: {note}")
+        except Exception as e:
+            print(f"AUTO board refresh failed: {e}")
 
 
 @tree.error

@@ -192,7 +192,10 @@ def test_discord_embed_limits() -> None:
         check(flen <= 1024, f"dashboard field[{i}] ≤1024", f"len={flen}")
 
     boards = build_standings_embeds(st)
-    check(len(boards) == 3, "3 division standings embeds")
+    # Lead summary card + one embed per division (Classic / Fusion / Arcade)
+    check(len(boards) == 4, "standings embeds = lead + 3 divisions", f"got {len(boards)}")
+    div_titles = { (emb.title or "") for emb in boards[1:] }
+    check(div_titles == {"Classic", "Fusion", "Arcade"}, "three division board titles", f"{div_titles}")
     for emb in boards:
         for i, flen in enumerate(field_lens(emb)):
             check(flen <= 1024, f"standings '{emb.title}' field[{i}] ≤1024", f"len={flen}")

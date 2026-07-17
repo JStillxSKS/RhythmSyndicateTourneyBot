@@ -15,15 +15,20 @@ from config import (
 from rules import standings_rows, team_week_breakdown
 from state import get_week
 from theme import (
+    DASH_STRIP_NAME,
     EMBED_COLOR,
+    OPS_STRIP_NAME,
+    STANDINGS_ATTACHMENT_NAME,
     apply_logo_thumbnail,
     base_embed,
     chip_line,
     footer_player,
     footer_public,
+    footer_rs4l,
     footer_staff,
     fmt_score,
     logo_file,
+    pill_line,
     rank_prefix,
     season_name,
     status_label,
@@ -109,24 +114,29 @@ def _song_label(week: dict[str, Any]) -> str:
     return song
 
 
-def build_dashboard_embed(state: dict[str, Any]) -> discord.Embed:
-    """Ops-dashboard style living board (mockup 04 language)."""
+def build_dashboard_embed(state: dict[str, Any], *, with_image: bool = True) -> discord.Embed:
+    """Ops-dashboard style living board (mockup 01 + 04 language)."""
     season = state.get("season") or {}
     week_n = int(season.get("current_week") or 1)
     week = get_week(state, week_n)
     status_raw = (week.get("status") or "scheduled").lower()
     burden = week_n == CAPTAIN_BURDEN_WEEK
 
-    desc_bits = [
-        f"**Week {week_n}** / {SEASON_WEEKS}",
-        status_label(status_raw),
-    ]
-    if burden:
-        desc_bits.append("⚡ **Captain's Burden ACTIVE**")
+    status_chip = "OPEN" if status_raw == "open" else ("CLOSED" if status_raw == "closed" else "SCHEDULED")
+    pills = pill_line(
+        f"WEEK {week_n}",
+        status_chip,
+        "CAPTAIN'S BURDEN" if burden else "CLASSIC · FUSION · ARCADE",
+    )
+    body = (
+        f"Living tournament board for **{season_name(state)}**.\n"
+        f"Song, deadlines, missing scores, and standings peek — all in one place.\n\n"
+        f"{pills}"
+    )
 
     embed = base_embed(
-        title=f"Rhythm Syndicate · {season_name(state)}",
-        description=chip_line(*desc_bits),
+        title=f"Week {week_n} dashboard",
+        description=body,
         thumbnail=True,
     )
 
@@ -186,7 +196,9 @@ def build_dashboard_embed(state: dict[str, Any]) -> discord.Embed:
         peeks.append(f"**{DIVISION_LABELS[div]}**\n" + "\n".join(lines))
     embed.add_field(name="Standings · top 3", value="\n\n".join(peeks) or "—", inline=False)
 
-    embed.set_footer(text=footer_public("living dashboard"))
+    if with_image:
+        embed.set_image(url=f"attachment://{DASH_STRIP_NAME}")
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · DASHBOARD"))
     return embed
 
 
@@ -214,7 +226,12 @@ def _pack_field_lines(lines: list[str], *, limit: int = 1024, more_label: str = 
     return text[:limit] if len(text) > limit else text
 
 
-def build_standings_embeds(state: dict[str, Any], division: str | None = None) -> list[discord.Embed]:
+def build_standings_embeds(
+    state: dict[str, Any],
+    division: str | None = None,
+    *,
+    with_image: bool = True,
+) -> list[discord.Embed]:
     season = state.get("season") or {}
     week_n = int(season.get("current_week") or 1)
     subs = state.get("submissions") or []
@@ -222,15 +239,30 @@ def build_standings_embeds(state: dict[str, Any], division: str | None = None) -
     divs = [division] if division else list(DIVISIONS)
     embeds: list[discord.Embed] = []
 
+    # Lead card — graphic + summary (mockup-quality image attaches separately)
+    lead = base_embed(
+        title=f"{season_name(state)} standings",
+        description=(
+            f"Cumulative through **week {week_n}**.\n"
+            f"{pill_line('BEST VERIFIED', 'MISSING = 0', 'TEAMS OF 2')}"
+        ),
+        thumbnail=True,
+    )
+    if with_image:
+        lead.set_image(url=f"attachment://{STANDINGS_ATTACHMENT_NAME}")
+    lead.set_footer(text=footer_rs4l("RS TOURNEY BOT · STANDINGS"))
+    embeds.append(lead)
+
     for div in divs:
         if div not in DIVISIONS:
             continue
         rows = standings_rows(teams, subs, div, through_week=week_n)
         label = DIVISION_LABELS.get(div, div)
         embed = base_embed(
-            title=f"{label} standings",
-            description=f"{season_name(state)} · cumulative through **week {week_n}**",
+            title=f"{label}",
+            description=f"Division board · week **{week_n}**",
             thumbnail=False,
+            author="RHYTHM SYNDICATE · STANDINGS",
         )
         if not rows:
             embed.add_field(name="Board", value="*No teams in this division yet.*", inline=False)
@@ -244,43 +276,62 @@ def build_standings_embeds(state: dict[str, Any], division: str | None = None) -
                 value=_pack_field_lines(lines, more_label="teams"),
                 inline=False,
             )
-        embed.set_footer(text=footer_public("best verified · missing teammate = 0"))
+        embed.set_footer(text=footer_public("division board"))
         embeds.append(embed)
 
-    if not embeds:
-        embeds = [base_embed(title="Standings", description="No data.", thumbnail=False)]
-    # Logo only on first board to avoid re-upload spam
-    if embeds:
-        apply_logo_thumbnail(embeds[0])
+    if len(embeds) == 1:
+        # only lead with empty divisions
+        pass
     return embeds
 
 
-def build_team_embed(state: dict[str, Any], team: dict[str, Any]) -> discord.Embed:
+def build_team_embed(
+    state: dict[str, Any],
+    team: dict[str, Any],
+    *,
+    with_image: bool = True,
+) -> discord.Embed:
+    from rules import team_season_total
+    from theme import TEAM_CARD_NAME
+
     week_n = int(state.get("season", {}).get("current_week") or 1)
     subs = state.get("submissions") or []
     bd = team_week_breakdown(
         subs, team.get("captain_user_id"), team.get("teammate_user_id"), week_n
     )
+    season_tot = team_season_total(
+        subs, team.get("captain_user_id"), team.get("teammate_user_id"), through_week=week_n
+    )
     div = DIVISION_LABELS.get((team.get("division") or "").lower(), team.get("division"))
+    pills = pill_line(
+        *[
+            p
+            for p in (
+                str(div).upper() if div else "TEAM",
+                f"WEEK {week_n}",
+                "ACTIVE" if team.get("active", True) else "INACTIVE",
+                "CAPTAIN'S BURDEN" if bd["captain_burden"] else "",
+            )
+            if p
+        ]
+    )
     embed = base_embed(
         title=team.get("name") or "Team",
-        description=f"Division **{div}** · Week **{week_n}**",
+        description=f"Your roster and week totals.\n\n{pills}",
         thumbnail=True,
+        author="RHYTHM SYNDICATE · TEAM",
     )
     embed.add_field(name="Captain", value=f"<@{team.get('captain_user_id')}>", inline=True)
     embed.add_field(name="Teammate", value=f"<@{team.get('teammate_user_id')}>", inline=True)
-    embed.add_field(name="Status", value="Active" if team.get("active", True) else "Inactive", inline=True)
+    embed.add_field(name="Division", value=str(div), inline=True)
     embed.add_field(name="Captain score", value=fmt_score(bd["captain_score"]), inline=True)
     embed.add_field(name="Teammate score", value=fmt_score(bd["teammate_score"]), inline=True)
     label = "Team total (Captain's Burden)" if bd["captain_burden"] else "Team total"
     embed.add_field(name=label, value=f"**{fmt_score(bd['team_total'])}**", inline=True)
-    if bd["captain_burden"]:
-        embed.add_field(
-            name="Captain's Burden",
-            value="Captain + (Teammate × 2) this week",
-            inline=False,
-        )
-    embed.set_footer(text=footer_player())
+    embed.add_field(name="Season total", value=f"**{fmt_score(season_tot)}**", inline=True)
+    if with_image:
+        embed.set_image(url=f"attachment://{TEAM_CARD_NAME}")
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · TEAM"))
     return embed
 
 
@@ -288,8 +339,11 @@ def build_score_embed(
     state: dict[str, Any],
     team: dict[str, Any],
     user_id: int | str,
+    *,
+    with_image: bool = True,
 ) -> discord.Embed:
     from rules import player_week_score, team_season_total
+    from theme import SCORE_FLASH_NAME
 
     week_n = int(state.get("season", {}).get("current_week") or 1)
     subs = state.get("submissions") or []
@@ -300,10 +354,16 @@ def build_score_embed(
     season_tot = team_season_total(
         subs, team.get("captain_user_id"), team.get("teammate_user_id"), through_week=week_n
     )
+    pills = pill_line(
+        f"WEEK {week_n}",
+        "BEST VERIFIED",
+        "BURDEN ON" if bd["captain_burden"] else "STANDARD SCORING",
+    )
     embed = base_embed(
         title="Your score",
-        description=f"**{team.get('name') or 'Team'}** · Week **{week_n}**",
+        description=f"**{team.get('name') or 'Team'}**\n\n{pills}",
         thumbnail=True,
+        author="RHYTHM SYNDICATE · SCORES",
     )
     embed.add_field(name="Your best (verified)", value=f"**{fmt_score(mine)}**", inline=False)
     embed.add_field(name="Captain this week", value=fmt_score(bd["captain_score"]), inline=True)
@@ -316,23 +376,31 @@ def build_score_embed(
             value="⚡ Active: Captain + (Teammate × 2)",
             inline=False,
         )
-    embed.set_footer(text=footer_player())
+    if with_image:
+        embed.set_image(url=f"attachment://{SCORE_FLASH_NAME}")
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · SCORES"))
     return embed
 
 
 def build_rules_embed() -> discord.Embed:
     text = (
+        f"{pill_line('SEASON 1', 'TEAMS OF 2', '4 WEEKS')}\n\n"
         "**Divisions:** Classic · Fusion · Arcade\n"
         "**Teams of 2** (same division only)\n"
-        "**4 weeks** — song reveal Sat 10:00 AM PST · deadline Fri 11:59 PM PST\n"
+        "**Schedule** — song reveal Sat 10:00 AM PST · deadline Fri 11:59 PM PST\n"
         "Unlimited attempts — only the **highest verified** score counts\n"
         "Missing teammate score = **0** (team stays active)\n"
         "Late scores need **staff approval**\n"
         f"**Week {CAPTAIN_BURDEN_WEEK} Captain's Burden:** Captain + (Teammate × 2)\n"
         "Registration via Sesh · staff import teams after close"
     )
-    embed = base_embed(title="Season 1 rules", description=text, thumbnail=True)
-    embed.set_footer(text=footer_public())
+    embed = base_embed(
+        title="Season 1 rules",
+        description=text,
+        thumbnail=True,
+        author="RHYTHM SYNDICATE · RULES",
+    )
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · RULES"))
     return embed
 
 
@@ -341,6 +409,7 @@ def build_help_embed() -> discord.Embed:
 
     text = (
         f"**Build** `{BOT_VERSION}`\n\n"
+        f"{pill_line('PLAYERS', '/tourney', 'STAFF /rs')}\n\n"
         "**Player commands**\n"
         "`/tourney status` — week, song, deadline\n"
         "`/tourney my-team` — your team\n"
@@ -352,11 +421,11 @@ def build_help_embed() -> discord.Embed:
         "Staff commands use `/rs`."
     )
     embed = base_embed(
-        title="Rhythm Syndicate Tournament Bot",
+        title="Tournament Bot",
         description=text,
         thumbnail=True,
     )
-    embed.set_footer(text=footer_player())
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · HELP"))
     return embed
 
 
@@ -367,7 +436,7 @@ def build_announce_embed(
     style: str = "default",
 ) -> discord.Embed:
     """
-    Ops-strip announcement embed (mockup 04).
+    Ops-strip announcement embed (mockup 01 + 04).
     style: default | week_open | week_close | burden
     """
     season = state.get("season") or {}
@@ -377,21 +446,21 @@ def build_announce_embed(
     burden = week_n == CAPTAIN_BURDEN_WEEK or style == "burden"
 
     if style == "week_open":
-        title = f"Week {week_n} is OPEN"
-        head = status_label("open")
+        title = f"Season 1 · Week {week_n} is LIVE"
+        pills = pill_line(f"WEEK {week_n} OPEN", "SAT 10:00 AM PST", "CLASSIC · FUSION · ARCADE")
     elif style == "week_close":
         title = f"Week {week_n} is CLOSED"
-        head = status_label("closed")
-    elif style == "burden" or burden and style == "week_open":
+        pills = pill_line(f"WEEK {week_n} CLOSED", "LATES NEED APPROVAL")
+    elif style == "burden" or (burden and style == "week_open"):
         title = f"Captain's Burden · Week {week_n}"
-        head = "⚡ Special scoring week"
+        pills = pill_line("CAPTAIN + TEAMMATE × 2", f"WEEK {week_n}")
     else:
-        title = "Rhythm Syndicate · Announcement"
-        head = season_name(state)
+        title = "Official announcement"
+        pills = pill_line(season_name(state), f"WEEK {week_n}", status_label(status_raw).replace("● ", "").replace("○ ", ""))
 
     embed = base_embed(
         title=title,
-        description=f"{head}\n\n{message}",
+        description=f"{message}\n\n{pills}",
         thumbnail=True,
     )
     embed.add_field(name="Week", value=f"**{week_n}** / {SEASON_WEEKS}", inline=True)
@@ -411,7 +480,7 @@ def build_announce_embed(
             value="**ACTIVE** — Captain + (Teammate × 2)",
             inline=False,
         )
-    embed.set_footer(text=footer_staff())
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · ANNOUNCEMENT"))
     return embed
 
 
@@ -443,9 +512,13 @@ def build_week_status_embed(
 
 
 def build_admin_ok_embed(title: str, description: str, **fields: str) -> discord.Embed:
-    embed = base_embed(title=title, description=description, thumbnail=True)
+    embed = base_embed(
+        title=title,
+        description=description,
+        thumbnail=True,
+        author="RHYTHM SYNDICATE · STAFF",
+    )
     for name, value in fields.items():
-        # field names: use human labels; keys with _ become spaces
         label = name.replace("_", " ").title()
         embed.add_field(name=label, value=value, inline=True)
     embed.set_footer(text=footer_staff())
@@ -462,14 +535,21 @@ def build_submission_reply_embed(
     if verified:
         title = "Score verified"
         color = EMBED_COLOR
+        pills = pill_line("VERIFIED", "COUNTS TOWARD BEST")
     else:
         title = "Score pending"
-        color = 0xC5CCD4  # steel — awaiting staff
-    embed = discord.Embed(title=title, description=status_text, color=color)
+        color = 0x8B929A  # steel — awaiting staff
+        pills = pill_line("PENDING", "STAFF APPROVAL")
+    embed = base_embed(
+        title=title,
+        description=f"{status_text}\n\n{pills}",
+        color=color,
+        thumbnail=True,
+        author="RHYTHM SYNDICATE · SCORE INTAKE",
+    )
     if score is not None:
-        embed.add_field(name="Score", value=fmt_score(score), inline=True)
+        embed.add_field(name="Score", value=f"**{fmt_score(score)}**", inline=True)
     if week is not None:
         embed.add_field(name="Week", value=str(week), inline=True)
-    apply_logo_thumbnail(embed)
-    embed.set_footer(text=footer_public("score intake"))
+    embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · SCORES"))
     return embed

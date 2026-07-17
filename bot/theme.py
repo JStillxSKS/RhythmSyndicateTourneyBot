@@ -23,6 +23,10 @@ LOGO_ATTACHMENT_NAME = "rhythm-syndicate-logo.jpg"
 HERO_ATTACHMENT_NAME = "rs-announce-hero.png"
 STANDINGS_ATTACHMENT_NAME = "rs-standings.png"
 VERSE_ATTACHMENT_NAME = "rs-verse-card.png"
+OPS_STRIP_NAME = "rs-ops-strip.png"
+DASH_STRIP_NAME = "rs-dashboard-strip.png"
+SCORE_FLASH_NAME = "rs-score-flash.png"
+TEAM_CARD_NAME = "rs-team-card.png"
 
 STATUS_OPEN = "open"
 STATUS_CLOSED = "closed"
@@ -43,18 +47,23 @@ def status_label(raw: str | None) -> str:
 
 
 def footer_public(extra: str | None = None) -> str:
-    base = "Players: /tourney · Staff: /rs"
+    # Mockup 01 style: left brand · right RS4L feel
+    base = "RS TOURNEY BOT"
     if extra:
-        return f"{base} · {extra}"
-    return base
+        return f"{base}  ·  {extra.upper() if len(extra) < 24 else extra}"
+    return f"{base}  ·  ANNOUNCEMENT"
 
 
 def footer_staff() -> str:
-    return f"Staff · RS Tourney Bot {BOT_VERSION}"
+    return f"RS TOURNEY BOT  ·  STAFF  ·  {BOT_VERSION}"
 
 
 def footer_player() -> str:
-    return f"RS · Season 1 · {BOT_VERSION}"
+    return f"RS TOURNEY BOT  ·  SEASON 1  ·  {BOT_VERSION}"
+
+
+def footer_rs4l(left: str = "RS TOURNEY BOT") -> str:
+    return f"{left}                                          RS4L"
 
 
 def base_embed(
@@ -63,15 +72,27 @@ def base_embed(
     description: str | None = None,
     color: int | None = None,
     thumbnail: bool = True,
+    author: str = "RHYTHM SYNDICATE · OFFICIAL",
 ) -> discord.Embed:
+    """Embed chrome matching mockup 01: author line, red accent, logo thumb, RS footer."""
     embed = discord.Embed(
         title=title,
         description=description,
         color=color if color is not None else EMBED_COLOR,
     )
+    if author:
+        embed.set_author(name=author)
     if thumbnail and LOGO_PATH.is_file():
         embed.set_thumbnail(url=f"attachment://{LOGO_ATTACHMENT_NAME}")
     return embed
+
+
+def pill_line(*chips: str) -> str:
+    """Discord-friendly 'pill' row (mockup 01 chips)."""
+    clean = [c.strip() for c in chips if c and str(c).strip()]
+    if not clean:
+        return ""
+    return " · ".join(f"`{c}`" for c in clean)
 
 
 def apply_logo_thumbnail(embed: discord.Embed) -> discord.Embed:

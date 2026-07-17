@@ -1,10 +1,12 @@
 # RS Tournament Bot — pickup checklist
 
-**Last updated:** 2026-07-15 (Windows · Grok Lesnar)  
+**Last updated:** 2026-07-16 (Windows · Grok Lesnar)  
 **Project:** `C:\Users\JStillxSKS\Desktop\RhythmSyndicateTourneyBot\`  
 **Host:** **Windows only** (do not hand to Kali)  
-**Build string:** `BOT_VERSION` in `bot/config.py` → currently **`2026-07-16-golive-v1`**  
+**Build string:** `BOT_VERSION` in `bot/config.py` → currently **`2026-07-16-auto-v1`**  
 **Prove live:** `/tourney help` and `/rs where` must show that string after deploy  
+
+**User note:** Test server in use. Mockups live in bot (`render_html.py`). **Visual editor (text only):** `visual-editor/index.html` or Desktop `open-rs-visual-editor.bat`.
 
 Master bridge: `Desktop\GROK_BRIDGE.md` (also notes this project).
 
@@ -57,21 +59,14 @@ Master bridge: `Desktop\GROK_BRIDGE.md` (also notes this project).
 
 ## C. Discord application (user / Laura side)
 
-- [ ] Discord application created (name e.g. RS Tourney)
-- [ ] Bot user + token copied into **local** `.env` only (never bridge/chat)
-- [ ] **Message Content Intent** ON
-- [ ] Invite with scopes: `bot` + `applications.commands`
-- [ ] Permissions (planned / user handling):
-  - [ ] View Channel, Send Messages, Embed Links, Attach Files
-  - [ ] Read Message History, Add Reactions
-  - [ ] Manage Messages (pin)
-  - [ ] Create Public Threads (+ Send in Threads) — optional, user OK with it
-- [ ] Bot invited to **Rhythm Syndicate** server
-- [ ] Bot role can see intended channels
-- [ ] IDs collected: `RS_GUILD_ID`, `RS_CHANNEL_ID`, `RS_ADMIN_ROLE_IDS` (± submit channel)
-- [ ] Local `.env` filled from `.env.example`
-- [ ] Optional: private **lab channel** (only user + Laura + bot) for playground
-- [ ] Slash commands visible (`/tourney`, `/rs`) when bot is running
+- [x] Discord application created + bot running somewhere (user: **test server in use**)
+- [~] Token / env live on **host that runs the bot** (Render and/or machine with secrets) — not necessarily this Desktop `.env`
+- [~] **Message Content Intent** / scopes / perms — assumed OK if score embeds + slash work on test server; re-check if something fails
+- [x] Bot invited to **test server** (active playground)
+- [ ] Bot invited to **Rhythm Syndicate** (production) when ready
+- [ ] Production IDs: Syndicate `RS_GUILD_ID`, live tourney `RS_CHANNEL_ID`, `RS_ADMIN_ROLE_IDS`
+- [ ] Optional: private lab channel **inside Syndicate** later, or keep using test server until night-before
+- [~] Slash commands visible on test server (`/tourney`, `/rs`)
 
 **PDF checklist for her/you:**  
 `Desktop\Rhythm_Syndicate_Tourney_Bot_Discord_Setup.pdf`  
@@ -79,19 +74,14 @@ and `RhythmSyndicateTourneyBot\DISCORD_SETUP.pdf`
 
 ---
 
-## D. Local prove (before her Render)
+## D. Live prove (test server — in progress / user-driven)
 
-- [ ] `pip install -r requirements.txt`
-- [ ] `python bot/main.py` stays online
-- [ ] Logs: `RS TOURNEY BOT ONLINE BOT_VERSION=…`
-- [ ] `/tourney help` → correct build
-- [ ] `/rs where` → guild/channel/env look right
-- [ ] Lab: `/rs team add` (you + her or alts) → `/rs song set` → `/rs week open`
-- [ ] Forward Smash Drums score embed → ✅ or ⏳
-- [ ] `/rs dashboard post` + pin
-- [ ] Optional: `/rs calendar post` with a test image
-- [ ] `/rs week close` → late path / approve
-- [ ] Restart bot → state still there (`data/rs_state.json`)
+- [~] Bot online against **test server** (user confirmed use)
+- [ ] Confirm `/tourney help` shows expected `BOT_VERSION` (which host/deploy?)
+- [ ] `/rs where` → points at **test** guild/channel (not Syndicate yet)
+- [~] Exercise as needed: team add, song set, week open/close, score embeds, dashboard, calendar
+- [ ] Note any bugs found on test server for next code pass
+- [ ] Restart / redeploy → state still good on that host
 
 ---
 
@@ -148,11 +138,11 @@ and `RhythmSyndicateTourneyBot\DISCORD_SETUP.pdf`
 
 ## Next session — start here (priority order)
 
-1. **Check Discord progress with user** — app invited? `.env` ready? lab channel?
-2. If yes → **local `python bot/main.py`** and run section **D** smoke  
-3. If no Discord yet → only safe code polish or wait; do not invent her token  
-4. Prep **Render handoff blurb** for Laura when she’s ready (section E)  
-5. Do **not** point production at public channel until night-before plan  
+1. **Test server** is the playground — continue smoke / bugfix there  
+2. Confirm **which process** is live (Render vs local) and **build string** on `/tourney help`  
+3. Fix any test-server issues in code; redeploy  
+4. **Syndicate invite + night-before switch** only when Season 1 window is close (section F)  
+5. After live is solid → cut test server / extra channels (cleaner)  
 6. Read this file + `OPERATOR_GUIDE.md` + bridge RS section before coding  
 
 ### Quick commands (Windows)
