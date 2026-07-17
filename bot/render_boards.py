@@ -32,25 +32,32 @@ TEAM_CARD_NAME = "rs-team-card.png"
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = []
+    candidates: list[str] = []
     if bold:
         candidates += [
             r"C:\Windows\Fonts\arialbd.ttf",
             r"C:\Windows\Fonts\segoeuib.ttf",
             r"C:\Windows\Fonts\tahomabd.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         ]
     candidates += [
         r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\segoeui.ttf",
         r"C:\Windows\Fonts\tahoma.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ]
     for path in candidates:
-        if Path(path).is_file():
+        if path and Path(path).is_file():
             try:
                 return ImageFont.truetype(path, size)
             except OSError:
                 continue
-    return ImageFont.load_default()
+    try:
+        return ImageFont.load_default(size=size)  # type: ignore[call-arg]
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def _load_logo(size: int) -> Image.Image | None:

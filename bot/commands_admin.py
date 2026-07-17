@@ -897,25 +897,13 @@ async def _post_announce(
                 song = f"{song} — {week['song_artist']}"
             season = (state.get("season") or {}).get("name") or "Season 1"
 
-            # Prefer mockup HTML pipeline (same CSS as concept cards)
+            # Production: always Pillow heroes for open/close (HTML/Edge is flaky /
+            # near-black on many hosts). Optional HTML only if RS_HERO_HTML=1.
+            from render_banners import render_hero_banner, render_hero_from_state
+
             if style == "burden" or (week_n == CAPTAIN_BURDEN_WEEK and style == "week_open"):
-                try:
-                    from render_html import render_cinematic_mockup_png
-
-                    png = render_cinematic_mockup_png(
-                        headline="Captain's Burden",
-                        accent=f"Week {week_n}",
-                        body=message[:220],
-                        cta="Standings live",
-                        cta_sub=f"RS · {season} finale window",
-                    )
-                except Exception:
-                    png = None
-                if not png:
-                    png = render_hero_from_state(state, mode="burden")
+                png = render_hero_from_state(state, mode="burden")
             elif style == "week_close":
-                from render_banners import render_hero_banner
-
                 png = render_hero_banner(
                     week=week_n,
                     season=season,
@@ -924,32 +912,17 @@ async def _post_announce(
                     deadline=None,
                     burden=week_n == CAPTAIN_BURDEN_WEEK,
                 )
+            elif style == "week_open":
+                png = render_hero_banner(
+                    week=week_n,
+                    season=season,
+                    status="open",
+                    song=song,
+                    deadline=None,
+                    burden=week_n == CAPTAIN_BURDEN_WEEK,
+                )
             elif style == "default":
-                # Mockup 01 embed-classic card as the image
-                try:
-                    from render_html import render_embed_mockup_png
-
-                    st_chip = (
-                        "OPEN"
-                        if (week.get("status") or "") == "open"
-                        else "CLOSED"
-                        if (week.get("status") or "") == "closed"
-                        else "UPDATE"
-                    )
-                    png = render_embed_mockup_png(
-                        title="Season 1 is",
-                        title_accent="LIVE",
-                        body=message[:280],
-                        chips=[
-                            (f"Week {week_n}", True),
-                            (st_chip, False),
-                            ("Classic · Fusion · Arcade", False),
-                        ],
-                    )
-                except Exception:
-                    png = None
-                if not png:
-                    png = render_hero_from_state(state, mode="announce")
+                png = render_hero_from_state(state, mode="announce")
             else:
                 png = render_hero_from_state(state, mode="week")
 

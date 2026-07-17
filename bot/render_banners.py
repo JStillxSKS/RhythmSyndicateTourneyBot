@@ -21,25 +21,36 @@ CARD = (18, 20, 23)
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    candidates = []
+    """Cross-platform fonts — Windows local + Linux (Render) DejaVu/Liberation."""
+    candidates: list[str] = []
     if bold:
         candidates += [
             r"C:\Windows\Fonts\arialbd.ttf",
             r"C:\Windows\Fonts\segoeuib.ttf",
             r"C:\Windows\Fonts\tahomabd.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
         ]
     candidates += [
         r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\segoeui.ttf",
         r"C:\Windows\Fonts\tahoma.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
     ]
     for path in candidates:
-        if Path(path).is_file():
+        if path and Path(path).is_file():
             try:
                 return ImageFont.truetype(path, size)
             except OSError:
                 continue
-    return ImageFont.load_default()
+    # Last resort: still try to scale default (tiny otherwise on Render)
+    try:
+        return ImageFont.load_default(size=size)  # type: ignore[call-arg]
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def _load_logo(size: int) -> Image.Image | None:
@@ -89,34 +100,45 @@ def render_hero_banner(
     headline: str | None = None,
     kicker: str = "RHYTHM SYNDICATE PRESENTS",
 ) -> bytes:
-    """Stadium / hero announcement banner — **mockup 02 HTML** first, Pillow fallback."""
-    try:
-        from render_html import render_hero_mockup_png
+    """
+    Stadium / hero announcement banner.
 
-        png = render_hero_mockup_png(
-            week=week,
-            season=season,
-            status=status,
-            song=song,
-            deadline=deadline,
-            burden=burden,
-            headline=headline,
-            kicker=kicker.title() if kicker.isupper() else kicker,
-        )
-        if png:
-            return png
-    except Exception as e:
-        print(f"Mockup hero HTML path failed, Pillow fallback: {e}")
+    Pillow is the production path (works on Render/Linux). HTML/Edge mockups are
+    optional and often return near-black captures — only used if explicitly forced.
+    """
+    # Prefer reliable Pillow art. Set RS_HERO_HTML=1 to try Edge mockup first (Windows only).
+    import os
+
+    if (os.getenv("RS_HERO_HTML") or "").strip().lower() in ("1", "true", "yes", "on"):
+        try:
+            from render_html import render_hero_mockup_png
+
+            png = render_hero_mockup_png(
+                week=week,
+                season=season,
+                status=status,
+                song=song,
+                deadline=deadline,
+                burden=burden,
+                headline=headline,
+                kicker=kicker.title() if kicker.isupper() else kicker,
+            )
+            if png:
+                return png
+        except Exception as e:
+            print(f"Mockup hero HTML path failed, Pillow fallback: {e}")
 
     w, h = 960, 420
-    img = Image.new("RGB", (w, h), BLACK)
+    # Brighter base so Discord previews aren't a black slab
+    img = Image.new("RGB", (w, h), (14, 16, 20))
     draw = ImageDraw.Draw(img, "RGBA")
 
-    # Soft red glow top-center
+    # Stronger red glow top-center + bottom wash
     glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
-    gd.ellipse((w // 2 - 280, -120, w // 2 + 280, 260), fill=(*RED, 55))
-    glow = glow.filter(ImageFilter.GaussianBlur(48))
+    gd.ellipse((w // 2 - 320, -140, w // 2 + 320, 280), fill=(*RED, 90))
+    gd.ellipse((w // 2 - 200, h - 160, w // 2 + 200, h + 80), fill=(80, 20, 24, 50))
+    glow = glow.filter(ImageFilter.GaussianBlur(42))
     img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
     draw = ImageDraw.Draw(img)
 
