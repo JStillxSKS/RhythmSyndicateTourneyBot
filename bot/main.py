@@ -30,7 +30,7 @@ from config import (
     RS_GUILD_ID,
     RS_SUBMIT_CHANNEL_ID,
 )
-from scores import parse_game_score_message, record_submission
+from scores import extract_score_provenance, parse_game_score_message, record_submission
 from state import load_state, save_state
 
 # ---------------------------------------------------------------------------
@@ -118,6 +118,40 @@ async def on_message(message: discord.Message) -> None:
     if not data:
         return
 
+    # Try to resolve reply/forward originals so we can see when the score was *done*
+    try:
+        ref = getattr(message, "reference", None)
+        if (
+            ref is not None
+            and getattr(ref, "resolved", None) is None
+            and getattr(ref, "message_id", None)
+            and getattr(ref, "channel_id", None)
+        ):
+            try:
+                ch = message.channel
+                if getattr(ch, "id", None) != ref.channel_id:
+                    ch = client.get_channel(ref.channel_id) or await client.fetch_channel(
+                        ref.channel_id
+                    )
+                if ch is not None and hasattr(ch, "fetch_message"):
+                    ref.resolved = await ch.fetch_message(ref.message_id)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
+        provenance = extract_score_provenance(message)
+    except Exception:
+        from datetime import timezone as _tz
+
+        submitted_at = message.created_at
+        if submitted_at.tzinfo is None:
+            submitted_at = submitted_at.replace(tzinfo=_tz.utc)
+        provenance = {
+            "submitted_at": submitted_at,
+            "score_achieved_at": submitted_at,
+            "score_source": "message.created_at",
+            "evidence": [],
+        }
+
     state = get_state()
     from state import find_team_by_user
 
@@ -130,6 +164,10 @@ async def on_message(message: discord.Message) -> None:
             "(score still counted; staff can review)."
         )
 
+    submitted_at = provenance["submitted_at"]
+    score_achieved_at = provenance["score_achieved_at"]
+    score_source = provenance.get("score_source") or "message.created_at"
+
     sub, status = record_submission(
         state,
         user_id=message.author.id,
@@ -137,6 +175,9 @@ async def on_message(message: discord.Message) -> None:
         source="embed",
         message_id=message.id,
         channel_id=message.channel.id,
+        submitted_at=submitted_at,
+        score_achieved_at=score_achieved_at,
+        score_time_source=str(score_source),
         meta={
             "title": data.get("title"),
             "artist": data.get("artist"),
@@ -144,11 +185,20 @@ async def on_message(message: discord.Message) -> None:
             "difficulty": data.get("difficulty"),
             "playerName": data.get("playerName"),
             "team_division": team.get("division") if team else None,
+            "score_time_evidence": provenance.get("evidence") or [],
         },
     )
     from dashboard import build_submission_reply_embed, logo_file
     from theme import SCORE_FLASH_NAME, files_for_embeds
 
+    rejected_before = (
+        sub is None
+        and "Rejected" in (status or "")
+        and (
+            "before" in (status or "").lower()
+            or "done before" in (status or "").lower()
+        )
+    )
     status = status + mode_note
     verified = bool(sub and sub.get("verified"))
     score_val = int((sub or {}).get("score") or data.get("score") or 0)
@@ -156,7 +206,7 @@ async def on_message(message: discord.Message) -> None:
 
     if sub is None:
         try:
-            await message.add_reaction("❓")
+            await message.add_reaction("❌" if rejected_before else "❓")
         except discord.HTTPException:
             pass
         verified = False

@@ -76,9 +76,15 @@ Do **not** leave `RS_TEST_TIME=1` on production.
 ## Score rules (bot-enforced)
 
 - Highest **verified** score only  
-- Missing teammate = **0**  
-- Closed week → pending until approve  
+- Missing partner = **0**  
+- **Classic / Arcade:** Captain + Teammate; Week 4 **Captain's Burden** = Captain + (Teammate × 2)  
+- **Fusion (Season 1):** still a **duo** — **both are captains** (no teammate role); **no Burden bonus** ever  
+- **Before week open** (status scheduled, or Discord post time before `open_at`) → **rejected** (❌, not counted)  
+- **Score done before open** (embed timestamp / original forward time before `open_at`) → **rejected** even if posted after open — must re-play after the week starts  
+- **During open window** (post + score after open) → auto-verified  
+- **After week close** (score after open, post late) → pending until staff approve  
 - Cumulative season standings per division  
+- Staff `/rs score set` can still override (manual)
 
 ## Brand / visuals
 

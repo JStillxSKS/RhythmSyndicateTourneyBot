@@ -23,6 +23,29 @@ def test_best_and_missing() -> None:
 def test_captain_burden() -> None:
     assert team_week_total(100, 50, 1) == 150
     assert team_week_total(100, 50, 4) == 100 + 100  # 100 + 50*2
+    assert team_week_total(100, 50, 4, division="classic") == 200
+    assert team_week_total(100, 50, 4, division="arcade") == 200
+
+
+def test_fusion_no_captain_role() -> None:
+    from rules import applies_captain_burden, division_has_captain_role, roster_labels
+
+    assert division_has_captain_role("fusion") is False
+    assert division_has_captain_role("classic") is True
+    # Both slots are captains (duo kept — A/B is only for distinction)
+    assert roster_labels("fusion") == ("Captain A", "Captain B")
+    assert applies_captain_burden(4, "fusion") is False
+    assert applies_captain_burden(4, "classic") is True
+    # Week 4: no ×2 for fusion — both captains, no teammate bonus
+    assert team_week_total(100, 50, 4, division="fusion") == 150
+
+    subs = [
+        {"user_id": "30", "week": 4, "score": 200, "verified": True},
+        {"user_id": "31", "week": 4, "score": 100, "verified": True},
+    ]
+    # classic would be 400; fusion stays 300 (both captains, no burden bonus)
+    assert team_season_total(subs, "30", "31", through_week=4, division="fusion") == 300
+    assert team_season_total(subs, "30", "31", through_week=4, division="classic") == 400
 
 
 def test_season_and_standings() -> None:
@@ -33,7 +56,7 @@ def test_season_and_standings() -> None:
         {"user_id": "11", "week": 4, "score": 100, "verified": True},
     ]
     # w1: 1500; w4 burden: 200 + 200 = 400; total 1900
-    assert team_season_total(subs, "10", "11", through_week=4) == 1900
+    assert team_season_total(subs, "10", "11", through_week=4, division="classic") == 1900
 
     teams = [
         {
@@ -62,5 +85,6 @@ def test_season_and_standings() -> None:
 if __name__ == "__main__":
     test_best_and_missing()
     test_captain_burden()
+    test_fusion_no_captain_role()
     test_season_and_standings()
     print("OK all rules tests passed")

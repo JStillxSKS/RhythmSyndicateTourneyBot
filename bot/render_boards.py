@@ -410,6 +410,8 @@ def render_team_card(
     week: int = 1,
     burden: bool = False,
     season_total: int | None = None,
+    slot1_label: str = "Captain",
+    slot2_label: str = "Teammate",
 ) -> bytes:
     """Team card for /tourney my-team."""
     w, h = 720, 320
@@ -438,10 +440,12 @@ def render_team_card(
     div = (division or "").upper() or "—"
     _chip(draw, (w - 140, 24), div[:12], f_chip, hot=True)
 
-    # Two columns captain / teammate
-    draw.text((36, 100), "CAPTAIN", font=f_lab, fill=STEEL_DIM)
+    # Two columns (Captain/Teammate or Fusion Player 1/2)
+    lab1 = (slot1_label or "Captain").upper()
+    lab2 = (slot2_label or "Teammate").upper()
+    draw.text((36, 100), lab1, font=f_lab, fill=STEEL_DIM)
     draw.text((36, 120), f"{int(captain_score):,}", font=f_val, fill=WHITE)
-    draw.text((280, 100), "TEAMMATE", font=f_lab, fill=STEEL_DIM)
+    draw.text((280, 100), lab2, font=f_lab, fill=STEEL_DIM)
     draw.text((280, 120), f"{int(teammate_score):,}", font=f_val, fill=WHITE)
 
     draw.text((36, 170), f"WEEK {week} TEAM TOTAL", font=f_lab, fill=STEEL_DIM)
@@ -449,6 +453,8 @@ def render_team_card(
 
     if burden:
         _chip(draw, (320, 200), "CAPTAIN'S BURDEN", f_chip, hot=True)
+    elif (division or "").lower() == "fusion":
+        _chip(draw, (320, 200), "BOTH CAPTAINS", f_chip, hot=False)
 
     if season_total is not None:
         draw.text((36, 260), f"SEASON TOTAL  {int(season_total):,}", font=f_val, fill=STEEL)

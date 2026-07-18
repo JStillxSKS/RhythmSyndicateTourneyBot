@@ -97,21 +97,55 @@ def test_weekend_ops() -> None:
     # Song + open already set
     check(st["weeks"]["1"]["status"] == "open", "week 1 open")
 
+    # Pin times after open_at so pre-event score gate does not reject lab posts
+    from datetime import datetime, timezone
+
+    after_open = datetime(2026, 7, 18, 18, 0, 0, tzinfo=timezone.utc)
+
     # Flood of on-time scores (channel forwards)
     for t in st["teams"]:
         cap, mate = int(t["captain_user_id"]), int(t["teammate_user_id"])
-        record_submission(st, user_id=cap, score=900_000, source="embed", message_id=cap, persist=False)
-        record_submission(st, user_id=mate, score=400_000, source="embed", message_id=mate, persist=False)
+        record_submission(
+            st,
+            user_id=cap,
+            score=900_000,
+            source="embed",
+            message_id=cap,
+            persist=False,
+            submitted_at=after_open,
+            score_achieved_at=after_open,
+        )
+        record_submission(
+            st,
+            user_id=mate,
+            score=400_000,
+            source="embed",
+            message_id=mate,
+            persist=False,
+            submitted_at=after_open,
+            score_achieved_at=after_open,
+        )
 
     # Double-fire same message (bot restart / re-process)
     t0 = st["teams"][0]
     cap = int(t0["captain_user_id"])
     n = len(st["submissions"])
-    record_submission(st, user_id=cap, score=1, source="embed", message_id=cap, persist=False)
+    record_submission(
+        st,
+        user_id=cap,
+        score=1,
+        source="embed",
+        message_id=cap,
+        persist=False,
+        submitted_at=after_open,
+        score_achieved_at=after_open,
+    )
     check(len(st["submissions"]) == n, "re-process same message_id does not double-count")
 
     # Unregistered in channel
-    sub, msg = record_submission(st, user_id=1, score=50, source="embed", persist=False)
+    sub, msg = record_submission(
+        st, user_id=1, score=50, source="embed", persist=False, submitted_at=after_open
+    )
     check(sub is None and "not on a registered" in msg.lower(), "unregistered rejected")
 
     # Mode mismatch still counts (meta only) — pipeline allows
@@ -123,15 +157,25 @@ def test_weekend_ops() -> None:
         message_id=cap + 9_000_000,
         meta={"gameMode": "arcade", "team_division": "classic"},
         persist=False,
+        submitted_at=after_open,
+        score_achieved_at=after_open,
     )
     check(sub2 is not None and best_verified_score(st["submissions"], cap, 1) == 910_000, "best-of after new message")
 
     # Close week → late pending
     st["weeks"]["1"]["status"] = "closed"
     late_uid = int(st["teams"][1]["captain_user_id"])
-    # wipe their verified for late path demo — use teammate who already has score; use new high score as pending
+    late_post = datetime(2026, 7, 26, 12, 0, 0, tzinfo=timezone.utc)
+    # Score was done during open window; post is late → pending (not pre-event reject)
     pend, _ = record_submission(
-        st, user_id=late_uid, score=999_999, source="embed", message_id=555, persist=False
+        st,
+        user_id=late_uid,
+        score=999_999,
+        source="embed",
+        message_id=555,
+        persist=False,
+        submitted_at=late_post,
+        score_achieved_at=after_open,
     )
     check(pend is not None and pend["verified"] is False, "closed week → pending")
 
@@ -140,18 +184,43 @@ def test_weekend_ops() -> None:
     approve_submission(st, pend["id"], admin_id=99, persist=False)
     check(best_verified_score(st["submissions"], late_uid, 1) == 999_999, "staff approve late counts")
 
-    # Week 4 burden
+    # Week 4 burden (classic team — Fusion both captains / no burden bonus)
     st["season"]["current_week"] = 4
     st["weeks"]["4"]["status"] = "open"
-    burden_team = st["teams"][2]
+    st["weeks"]["4"]["open_at"] = "2026-08-08T17:00:00+00:00"
+    burden_team = next(t for t in st["teams"] if t["division"] == "classic")
     bc, bm = int(burden_team["captain_user_id"]), int(burden_team["teammate_user_id"])
-    record_submission(st, user_id=bc, score=100, source="pg", week=4, persist=False)
-    record_submission(st, user_id=bm, score=50, source="pg", week=4, persist=False)
-    tot = team_season_total(st["submissions"], bc, bm, through_week=4)
+    w4_ok = datetime(2026, 8, 8, 18, 0, 0, tzinfo=timezone.utc)
+    record_submission(
+        st,
+        user_id=bc,
+        score=100,
+        source="pg",
+        week=4,
+        persist=False,
+        submitted_at=w4_ok,
+        score_achieved_at=w4_ok,
+        message_id=900001,
+    )
+    record_submission(
+        st,
+        user_id=bm,
+        score=50,
+        source="pg",
+        week=4,
+        persist=False,
+        submitted_at=w4_ok,
+        score_achieved_at=w4_ok,
+        message_id=900002,
+    )
+    tot = team_season_total(
+        st["submissions"], bc, bm, through_week=4, division="classic"
+    )
     # w1: 910k+400k or 900k+400k depending team — just check burden math on week 4 alone
     from rules import team_week_total
 
-    check(team_week_total(100, 50, 4) == 200, "burden formula week 4")
+    check(team_week_total(100, 50, 4, division="classic") == 200, "burden formula week 4")
+    check(team_week_total(100, 50, 4, division="fusion") == 150, "fusion week 4 no burden")
     check(tot >= 200, "season includes burden week")
 
 

@@ -189,7 +189,8 @@ def season_status_text(state: dict[str, Any], *, auto_week: bool) -> str:
         format_clock_status(state),
         f"**Current week:** **{week_n}** / {SEASON_WEEKS} · status **{w.get('status')}**",
         f"**Song:** {song}",
-        f"**Captain's Burden:** {'ACTIVE' if week_n == CAPTAIN_BURDEN_WEEK else f'week {CAPTAIN_BURDEN_WEEK}'}",
+        f"**Captain's Burden:** "
+        f"{'ACTIVE (Classic/Arcade; Fusion: both captains — no bonus)' if week_n == CAPTAIN_BURDEN_WEEK else f'week {CAPTAIN_BURDEN_WEEK} · Classic/Arcade only'}",
         f"**Teams:** {len([t for t in state.get('teams') or [] if t.get('active', True)])}",
         f"**Timezone:** {RS_TZ}",
     ]

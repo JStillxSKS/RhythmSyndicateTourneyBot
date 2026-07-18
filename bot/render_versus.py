@@ -568,20 +568,29 @@ def matchup_from_teams(
     name_b: tuple[str, str] | None = None,
 ) -> VerseMatchup:
     """Build matchup from team dicts + optional (captain_display, teammate_display)."""
-    from rules import team_week_breakdown
+    from rules import applies_captain_burden, roster_labels, team_week_breakdown
     from state import get_week
 
     season = state.get("season") or {}
     week_n = int(week if week is not None else season.get("current_week") or 1)
     subs = state.get("submissions") or []
     w = get_week(state, week_n)
-    burden = week_n == CAPTAIN_BURDEN_WEEK
+    # Verse burden chip only if both sides would use captain burden (classic/arcade week 4)
+    burden = applies_captain_burden(week_n, team_a.get("division")) or applies_captain_burden(
+        week_n, team_b.get("division")
+    )
 
     def side(team: dict[str, Any], names: tuple[str, str] | None) -> VerseSide:
+        div = team.get("division")
         bd = team_week_breakdown(
-            subs, team.get("captain_user_id"), team.get("teammate_user_id"), week_n
+            subs,
+            team.get("captain_user_id"),
+            team.get("teammate_user_id"),
+            week_n,
+            division=div,
         )
-        cap_n, mate_n = names if names else ("Captain", "Teammate")
+        defaults = roster_labels(div)
+        cap_n, mate_n = names if names else defaults
         return VerseSide(
             name=str(team.get("name") or "Team"),
             captain=cap_n,
@@ -597,7 +606,7 @@ def matchup_from_teams(
         season=str(season.get("name") or "Season 1"),
         window_open=(w.get("status") or "") == "open",
         burden=burden,
-        subtitle="Highest verified score" if not burden else "Captain + Teammate × 2",
+        subtitle="Highest verified score" if not burden else "Captain + Teammate × 2 (Classic/Arcade)",
     )
 
 

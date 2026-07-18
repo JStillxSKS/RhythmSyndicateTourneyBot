@@ -121,6 +121,136 @@ def week_is_open(state: dict[str, Any], week: int | None = None) -> bool:
     return (w.get("status") or "") == "open"
 
 
+def _parse_iso_utc(s: str | None) -> datetime | None:
+    if not s:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def extract_score_provenance(message: discord.Message) -> dict[str, Any]:
+    """
+    Best-effort: when the score was *done* vs when it was posted in the tourney channel.
+
+    score_achieved_at = earliest known time tied to the score content:
+      - embed.timestamp (game / bot score time when present)
+      - message_snapshots[].created_at (original message time on a Discord forward)
+      - reference.resolved.created_at + its embed timestamps (reply / pin of older score)
+
+    Falls back to message.created_at only when no older provenance exists.
+    """
+    candidates: list[tuple[str, datetime]] = []
+
+    def _add(label: str, dt: datetime | None) -> None:
+        utc = _as_utc(dt)
+        if utc is not None:
+            candidates.append((label, utc))
+
+    for i, embed in enumerate(message.embeds or []):
+        _add(f"embed[{i}].timestamp", getattr(embed, "timestamp", None))
+
+    for i, snap in enumerate(getattr(message, "message_snapshots", None) or []):
+        _add(f"snapshot[{i}].created_at", getattr(snap, "created_at", None))
+        for j, embed in enumerate(getattr(snap, "embeds", None) or []):
+            _add(f"snapshot[{i}].embed[{j}].timestamp", getattr(embed, "timestamp", None))
+
+    ref = getattr(message, "reference", None)
+    if ref is not None:
+        resolved = getattr(ref, "resolved", None)
+        if resolved is not None and not isinstance(resolved, discord.DeletedReferencedMessage):
+            _add("reference.created_at", getattr(resolved, "created_at", None))
+            for j, embed in enumerate(getattr(resolved, "embeds", None) or []):
+                _add(f"reference.embed[{j}].timestamp", getattr(embed, "timestamp", None))
+
+    submitted = _as_utc(getattr(message, "created_at", None)) or datetime.now(timezone.utc)
+    if not candidates:
+        return {
+            "submitted_at": submitted,
+            "score_achieved_at": submitted,
+            "score_source": "message.created_at",
+            "evidence": [],
+        }
+
+    best_src, best_dt = min(candidates, key=lambda x: x[1])
+    return {
+        "submitted_at": submitted,
+        "score_achieved_at": best_dt,
+        "score_source": best_src,
+        "evidence": [(src, dt.isoformat()) for src, dt in sorted(candidates, key=lambda x: x[1])],
+    }
+
+
+def submission_timing(
+    state: dict[str, Any],
+    *,
+    week: int | None = None,
+    submitted_at: datetime | None = None,
+) -> str:
+    """
+    Where the Discord submit falls relative to the event window.
+
+    Returns:
+      "before" — week not open yet (scheduled) OR message time before open_at
+      "open"   — valid live window
+      "after"  — week closed (late)
+    """
+    week_n = int(week if week is not None else state.get("season", {}).get("current_week") or 1)
+    w = get_week(state, week_n)
+    status = (w.get("status") or "scheduled").lower()
+    now = submitted_at or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    else:
+        now = now.astimezone(timezone.utc)
+
+    if status == "scheduled":
+        return "before"
+    if status == "closed":
+        return "after"
+    if status == "open":
+        open_at = _parse_iso_utc(w.get("open_at"))
+        # Hard rule: submit must not be before the recorded open time
+        if open_at is not None and now < open_at:
+            return "before"
+        close_at = _parse_iso_utc(w.get("close_at"))
+        if close_at is not None and now >= close_at:
+            return "after"
+        return "open"
+    return "before"
+
+
+def score_done_before_open(
+    state: dict[str, Any],
+    *,
+    week: int | None = None,
+    score_achieved_at: datetime | None = None,
+) -> bool:
+    """True if the score itself was achieved before the week's open_at."""
+    if score_achieved_at is None:
+        return False
+    week_n = int(week if week is not None else state.get("season", {}).get("current_week") or 1)
+    open_at = _parse_iso_utc(get_week(state, week_n).get("open_at"))
+    if open_at is None:
+        return False
+    achieved = _as_utc(score_achieved_at)
+    if achieved is None:
+        return False
+    return achieved < open_at
+
+
 def find_submission_by_message_id(
     state: dict[str, Any], message_id: int | str | None
 ) -> dict[str, Any] | None:
@@ -148,15 +278,21 @@ def record_submission(
     approved_by: int | None = None,
     persist: bool = True,
     week: int | None = None,
+    submitted_at: datetime | None = None,
+    score_achieved_at: datetime | None = None,
+    score_time_source: str | None = None,
 ) -> tuple[dict[str, Any] | None, str]:
     """
     Add a score submission for a week (default: season current_week).
     Returns (submission_or_None, status_message).
 
-    - Same Discord message_id is not recorded twice (re-forward / double-fire).
-    - persist=False skips disk write (playground flood / batch tests).
-    - week= targets a specific week without mutating season.current_week
-      (critical for /rs score set on past weeks during an open window).
+    Timing (player embeds / non-staff):
+      - Discord post **before** event open → **rejected**
+      - Score **done** before open_at (embed/forward original time) → **rejected**
+      - **open** window + score after open → auto-verified
+      - **after** close (score after open) → pending (staff approve)
+
+    Staff verified=True / approved_by still overrides (manual set / approve).
     """
     team = find_team_by_user(state, user_id)
     if not team:
@@ -165,7 +301,33 @@ def record_submission(
     week_n = int(week if week is not None else state.get("season", {}).get("current_week") or 1)
     if week_n < 1:
         week_n = 1
-    open_now = week_is_open(state, week_n)
+
+    submit_ts = _as_utc(submitted_at) or datetime.now(timezone.utc)
+    achieved_ts = _as_utc(score_achieved_at) or submit_ts
+
+    timing = submission_timing(state, week=week_n, submitted_at=submit_ts)
+    staff_override = verified is True or approved_by is not None
+    pre_event_score = score_done_before_open(
+        state, week=week_n, score_achieved_at=achieved_ts
+    )
+
+    # Hard reject: Discord post before the event window starts
+    if not staff_override and timing == "before":
+        return None, (
+            f"**Rejected** — this score was submitted **before** week {week_n} opened. "
+            f"Wait until the event is live, then send a score from the open window."
+        )
+
+    # Hard reject: score itself was *done* before open (even if posted after open)
+    if not staff_override and pre_event_score:
+        open_at = _parse_iso_utc(get_week(state, week_n).get("open_at"))
+        open_s = open_at.strftime("%Y-%m-%d %H:%M UTC") if open_at else "week open"
+        done_s = achieved_ts.strftime("%Y-%m-%d %H:%M UTC")
+        return None, (
+            f"**Rejected** — this score was **done before** week {week_n} started "
+            f"(`{done_s}` is before open `{open_s}`). "
+            f"Only runs from the event window count. Play again after open and re-submit."
+        )
 
     # Explicit verified=True (staff manual / approve path) always wins.
     if verified is True:
@@ -173,12 +335,12 @@ def record_submission(
     elif force_pending:
         verified = False
     elif verified is None:
-        # On-time auto-verify; closed week → pending unless staff approved_by
-        if open_now:
+        if timing == "open":
             verified = True
         elif approved_by is not None:
             verified = True
         else:
+            # after close → pending
             verified = False
     # verified is False stays False
 
@@ -206,8 +368,14 @@ def record_submission(
         "source": source,
         "message_id": str(message_id) if message_id else None,
         "channel_id": str(channel_id) if channel_id else None,
-        "meta": meta or {},
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "meta": {
+            **(meta or {}),
+            "timing": timing if not staff_override else "staff_override",
+            "submitted_at": submit_ts.isoformat(),
+            "score_achieved_at": achieved_ts.isoformat(),
+            "score_time_source": score_time_source or "submitted_at",
+        },
+        "created_at": submit_ts.isoformat(),
         "approved_by": str(approved_by) if approved_by else None,
     }
     state.setdefault("submissions", []).append(sub)
@@ -217,7 +385,7 @@ def record_submission(
     if sub["verified"]:
         return sub, f"Verified **{score:,}** for week {week_n} (best verified counts)."
     return sub, (
-        f"Recorded **{score:,}** as **pending** (week closed or needs approval). "
+        f"Recorded **{score:,}** as **pending** (submitted after week close). "
         f"Staff: `/rs submission approve`."
     )
 

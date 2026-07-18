@@ -222,13 +222,16 @@ def register_admin_commands(
     # --- team ---
     team_grp = app_commands.Group(name="team", description="Manage teams", parent=rs)
 
-    @team_grp.command(name="add", description="Add a team of 2")
+    @team_grp.command(
+        name="add",
+        description="Add a duo team (Fusion: both captains — no Burden bonus)",
+    )
     @admin_check()
     @app_commands.describe(
         name="Team name",
         division="classic | fusion | arcade",
-        captain="Captain (higher difficulty player)",
-        teammate="Teammate",
+        captain="Classic/Arcade: Captain · Fusion: Captain A (both are captains)",
+        teammate="Classic/Arcade: Teammate · Fusion: Captain B (required duo — no teammate role)",
     )
     @app_commands.choices(
         division=[
@@ -244,6 +247,8 @@ def register_admin_commands(
         captain: discord.Member,
         teammate: discord.Member,
     ) -> None:
+        from rules import division_has_captain_role, roster_labels
+
         state = get_state()
         div = normalize_division(division.value if hasattr(division, "value") else str(division))
         if not div:
@@ -251,9 +256,12 @@ def register_admin_commands(
                 f"Division must be one of: {', '.join(DIVISIONS)}", ephemeral=True
             )
             return
+        has_cap = division_has_captain_role(div)
+        slot1, slot2 = roster_labels(div)
         if captain.id == teammate.id:
             await interaction.response.send_message(
-                "Captain and teammate must be different people.", ephemeral=True
+                f"{slot1} and {slot2} must be different people.",
+                ephemeral=True,
             )
             return
         if find_team_by_name(state, name):
@@ -271,19 +279,27 @@ def register_admin_commands(
             "id": new_team_id(),
             "name": name.strip(),
             "division": div,
+            # Storage slots only — Fusion displays both as captains (no teammate / no Burden).
             "captain_user_id": str(captain.id),
             "teammate_user_id": str(teammate.id),
             "active": True,
         }
         state.setdefault("teams", []).append(team)
         save_state(state)
+        note = (
+            " · Fusion — both captains (no teammate / no Burden bonus)."
+            if not has_cap
+            else "."
+        )
         embed = build_admin_ok_embed(
             "Team added",
-            f"**{team['name']}** registered.",
+            f"**{team['name']}** registered{note}",
             division=DIVISION_LABELS[div],
-            captain=captain.mention,
-            teammate=teammate.mention,
-            id=f"`{team['id']}`",
+            **{
+                slot1.lower().replace(" ", "_"): captain.mention,
+                slot2.lower().replace(" ", "_"): teammate.mention,
+                "id": f"`{team['id']}`",
+            },
         )
         file = logo_file()
         if file:
@@ -291,17 +307,20 @@ def register_admin_commands(
         else:
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @team_grp.command(name="replace", description="Replace captain or teammate on a team")
+    @team_grp.command(
+        name="replace",
+        description="Replace a roster slot (Fusion: captain A or B — both captains)",
+    )
     @admin_check()
     @app_commands.describe(
         team_name="Exact team name",
-        role="captain or teammate",
+        role="Classic/Arcade: captain|teammate · Fusion: captain A|B",
         new_player="Replacement Discord user",
     )
     @app_commands.choices(
         role=[
-            app_commands.Choice(name="captain", value="captain"),
-            app_commands.Choice(name="teammate", value="teammate"),
+            app_commands.Choice(name="captain / captain A", value="captain"),
+            app_commands.Choice(name="teammate / captain B", value="teammate"),
         ]
     )
     async def team_replace(
@@ -310,6 +329,8 @@ def register_admin_commands(
         role: app_commands.Choice[str],
         new_player: discord.Member,
     ) -> None:
+        from rules import division_has_captain_role, roster_labels
+
         state = get_state()
         team = find_team_by_name(state, team_name)
         if not team:
@@ -321,21 +342,30 @@ def register_admin_commands(
                 f"{new_player.mention} is already on **{other.get('name')}**.", ephemeral=True
             )
             return
+        slot1, slot2 = roster_labels(team.get("division"))
+        role_label = slot1 if role.value == "captain" else slot2
         key = "captain_user_id" if role.value == "captain" else "teammate_user_id"
         old = team.get(key)
         team[key] = str(new_player.id)
-        if team.get("captain_user_id") == team.get("teammate_user_id"):
-            team[key] = old
-            await interaction.response.send_message(
-                "Captain and teammate cannot be the same.", ephemeral=True
-            )
-            return
+        if team.get("captain_user_id") and team.get("teammate_user_id"):
+            if team.get("captain_user_id") == team.get("teammate_user_id"):
+                team[key] = old
+                await interaction.response.send_message(
+                    f"{slot1} and {slot2} cannot be the same.",
+                    ephemeral=True,
+                )
+                return
         save_state(state)
+        note = ""
+        if not division_has_captain_role(team.get("division")):
+            note = " (Fusion — both captains, no Burden bonus)"
+        else:
+            note = ""
         embed = build_admin_ok_embed(
             "Team updated",
-            f"**{team['name']}** roster change.",
-            role=role.value,
-            was=f"<@{old}>",
+            f"**{team['name']}** roster change{note}.",
+            role=role_label,
+            was=f"<@{old}>" if old else "—",
             now=new_player.mention,
         )
         file = logo_file()
@@ -347,7 +377,11 @@ def register_admin_commands(
     @team_grp.command(name="import", description="Bulk import teams (CSV or JSON text)")
     @admin_check()
     @app_commands.describe(
-        data="CSV with header team_name,division,captain_id,teammate_id — or JSON array",
+        data=(
+            "CSV: team_name,division,captain_id,teammate_id "
+            "(always duo; Fusion = both captains / no Burden; "
+            "aliases captain_a_id,captain_b_id)"
+        ),
     )
     async def team_import_cmd(interaction: discord.Interaction, data: str) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -398,11 +432,18 @@ def register_admin_commands(
         for t in sorted(
             teams, key=lambda x: ((x.get("division") or ""), (x.get("name") or "").lower())
         ):
-            div = DIVISION_LABELS.get(t.get("division") or "", t.get("division"))
-            lines.append(
-                f"**{t.get('name')}** ({div}) · "
-                f"C <@{t.get('captain_user_id')}> · T <@{t.get('teammate_user_id')}> · `{t.get('id')}`"
-            )
+            from rules import division_has_captain_role, roster_labels
+
+            div_key = t.get("division") or ""
+            div = DIVISION_LABELS.get(div_key, div_key)
+            s1, s2 = roster_labels(div_key)
+            c, m = t.get("captain_user_id"), t.get("teammate_user_id")
+            if division_has_captain_role(div_key):
+                roster = f"C <@{c}> · T <@{m}>"
+            else:
+                # Fusion: both captains (still a duo; no teammate / no Burden)
+                roster = f"C·A <@{c}> · C·B <@{m}>"
+            lines.append(f"**{t.get('name')}** ({div}) · {roster} · `{t.get('id')}`")
         text = "\n".join(lines)
         if len(text) > 1900:
             text = "\n".join(lines[:40]) + f"\n… +{max(0, len(lines) - 40)} more"

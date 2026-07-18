@@ -97,7 +97,15 @@ def missing_submissions(state: dict[str, Any], week: int | None = None) -> list[
         if not t.get("active", True):
             continue
         name = t.get("name") or "Team"
-        for role, uid in (("C", t.get("captain_user_id")), ("T", t.get("teammate_user_id"))):
+        from rules import division_has_captain_role, roster_labels
+
+        div = t.get("division")
+        if division_has_captain_role(div):
+            slots = (("C", t.get("captain_user_id")), ("T", t.get("teammate_user_id")))
+        else:
+            # Fusion: both captains (still a duo) — C·A / C·B for missing list
+            slots = (("C·A", t.get("captain_user_id")), ("C·B", t.get("teammate_user_id")))
+        for role, uid in slots:
             if not uid:
                 continue
             if player_week_score(subs, uid, w) <= 0:
@@ -120,13 +128,14 @@ def build_dashboard_embed(state: dict[str, Any], *, with_image: bool = True) -> 
     week_n = int(season.get("current_week") or 1)
     week = get_week(state, week_n)
     status_raw = (week.get("status") or "scheduled").lower()
+    # Burden is Classic/Arcade only (Fusion: both captains → no teammate bonus)
     burden = week_n == CAPTAIN_BURDEN_WEEK
 
     status_chip = "OPEN" if status_raw == "open" else ("CLOSED" if status_raw == "closed" else "SCHEDULED")
     pills = pill_line(
         f"WEEK {week_n}",
         status_chip,
-        "CAPTAIN'S BURDEN" if burden else "CLASSIC · FUSION · ARCADE",
+        "BURDEN · CLASSIC/ARCADE" if burden else "CLASSIC · FUSION · ARCADE",
     )
     body = (
         f"Living tournament board for **{season_name(state)}**.\n"
@@ -156,13 +165,16 @@ def build_dashboard_embed(state: dict[str, Any], *, with_image: bool = True) -> 
     if burden:
         embed.add_field(
             name="Captain's Burden",
-            value="**ACTIVE** — Team score = Captain + (Teammate × 2)",
+            value=(
+                "**ACTIVE** (Classic / Arcade) — Captain + (Teammate × 2). "
+                "**Fusion:** both are captains (no teammate) — plain sum, no Burden bonus."
+            ),
             inline=False,
         )
     else:
         embed.add_field(
             name="Captain's Burden",
-            value=f"Week {CAPTAIN_BURDEN_WEEK} only",
+            value=f"Week {CAPTAIN_BURDEN_WEEK} · Classic/Arcade only (Fusion: both captains)",
             inline=True,
         )
         embed.add_field(
@@ -296,13 +308,24 @@ def build_team_embed(
 
     week_n = int(state.get("season", {}).get("current_week") or 1)
     subs = state.get("submissions") or []
+    div_key = (team.get("division") or "").lower()
     bd = team_week_breakdown(
-        subs, team.get("captain_user_id"), team.get("teammate_user_id"), week_n
+        subs,
+        team.get("captain_user_id"),
+        team.get("teammate_user_id"),
+        week_n,
+        division=div_key,
     )
     season_tot = team_season_total(
-        subs, team.get("captain_user_id"), team.get("teammate_user_id"), through_week=week_n
+        subs,
+        team.get("captain_user_id"),
+        team.get("teammate_user_id"),
+        through_week=week_n,
+        division=div_key,
     )
-    div = DIVISION_LABELS.get((team.get("division") or "").lower(), team.get("division"))
+    div = DIVISION_LABELS.get(div_key, team.get("division"))
+    slot1 = str(bd.get("slot1_label") or "Captain")
+    slot2 = str(bd.get("slot2_label") or "Teammate")
     pills = pill_line(
         *[
             p
@@ -310,6 +333,7 @@ def build_team_embed(
                 str(div).upper() if div else "TEAM",
                 f"WEEK {week_n}",
                 "ACTIVE" if team.get("active", True) else "INACTIVE",
+                "BOTH CAPTAINS" if not bd.get("has_captain_role") else "",
                 "CAPTAIN'S BURDEN" if bd["captain_burden"] else "",
             )
             if p
@@ -321,11 +345,21 @@ def build_team_embed(
         thumbnail=True,
         author="RHYTHM SYNDICATE · TEAM",
     )
-    embed.add_field(name="Captain", value=f"<@{team.get('captain_user_id')}>", inline=True)
-    embed.add_field(name="Teammate", value=f"<@{team.get('teammate_user_id')}>", inline=True)
+    cap_uid = team.get("captain_user_id")
+    mate_uid = team.get("teammate_user_id")
+    embed.add_field(
+        name=slot1,
+        value=f"<@{cap_uid}>" if cap_uid else "—",
+        inline=True,
+    )
+    embed.add_field(
+        name=slot2,
+        value=f"<@{mate_uid}>" if mate_uid else "—",
+        inline=True,
+    )
     embed.add_field(name="Division", value=str(div), inline=True)
-    embed.add_field(name="Captain score", value=fmt_score(bd["captain_score"]), inline=True)
-    embed.add_field(name="Teammate score", value=fmt_score(bd["teammate_score"]), inline=True)
+    embed.add_field(name=f"{slot1} score", value=fmt_score(bd["captain_score"]), inline=True)
+    embed.add_field(name=f"{slot2} score", value=fmt_score(bd["teammate_score"]), inline=True)
     label = "Team total (Captain's Burden)" if bd["captain_burden"] else "Team total"
     embed.add_field(name=label, value=f"**{fmt_score(bd['team_total'])}**", inline=True)
     embed.add_field(name="Season total", value=f"**{fmt_score(season_tot)}**", inline=True)
@@ -347,17 +381,30 @@ def build_score_embed(
 
     week_n = int(state.get("season", {}).get("current_week") or 1)
     subs = state.get("submissions") or []
+    div_key = (team.get("division") or "").lower()
     mine = player_week_score(subs, user_id, week_n)
     bd = team_week_breakdown(
-        subs, team.get("captain_user_id"), team.get("teammate_user_id"), week_n
+        subs,
+        team.get("captain_user_id"),
+        team.get("teammate_user_id"),
+        week_n,
+        division=div_key,
     )
     season_tot = team_season_total(
-        subs, team.get("captain_user_id"), team.get("teammate_user_id"), through_week=week_n
+        subs,
+        team.get("captain_user_id"),
+        team.get("teammate_user_id"),
+        through_week=week_n,
+        division=div_key,
     )
+    slot1 = str(bd.get("slot1_label") or "Captain")
+    slot2 = str(bd.get("slot2_label") or "Teammate")
     pills = pill_line(
         f"WEEK {week_n}",
         "BEST VERIFIED",
-        "BURDEN ON" if bd["captain_burden"] else "STANDARD SCORING",
+        "BURDEN ON" if bd["captain_burden"] else (
+            "FUSION · BOTH CAPTAINS" if not bd.get("has_captain_role") else "STANDARD SCORING"
+        ),
     )
     embed = base_embed(
         title="Your score",
@@ -366,14 +413,20 @@ def build_score_embed(
         author="RHYTHM SYNDICATE · SCORES",
     )
     embed.add_field(name="Your best (verified)", value=f"**{fmt_score(mine)}**", inline=False)
-    embed.add_field(name="Captain this week", value=fmt_score(bd["captain_score"]), inline=True)
-    embed.add_field(name="Teammate this week", value=fmt_score(bd["teammate_score"]), inline=True)
+    embed.add_field(name=f"{slot1} this week", value=fmt_score(bd["captain_score"]), inline=True)
+    embed.add_field(name=f"{slot2} this week", value=fmt_score(bd["teammate_score"]), inline=True)
     embed.add_field(name="Team week total", value=f"**{fmt_score(bd['team_total'])}**", inline=True)
     embed.add_field(name="Season total", value=f"**{fmt_score(season_tot)}**", inline=True)
     if bd["captain_burden"]:
         embed.add_field(
             name="Captain's Burden",
             value="⚡ Active: Captain + (Teammate × 2)",
+            inline=False,
+        )
+    elif not bd.get("has_captain_role"):
+        embed.add_field(
+            name="Fusion",
+            value="Both players are **captains** (no teammate role) — scores sum 1:1, **no Burden bonus**.",
             inline=False,
         )
     if with_image:
@@ -384,14 +437,16 @@ def build_score_embed(
 
 def build_rules_embed() -> discord.Embed:
     text = (
-        f"{pill_line('SEASON 1', 'TEAMS OF 2', '4 WEEKS')}\n\n"
+        f"{pill_line('SEASON 1', '4 WEEKS', '3 DIVISIONS')}\n\n"
         "**Divisions:** Classic · Fusion · Arcade\n"
-        "**Teams of 2** (same division only)\n"
+        "**Classic / Arcade:** teams of 2 — **Captain** + **Teammate**\n"
+        "**Fusion:** still a duo — **both are captains** (no teammate role); **no Burden bonus**\n"
         "**Schedule** — song reveal Sat 10:00 AM PST · deadline Fri 11:59 PM PST\n"
         "Unlimited attempts — only the **highest verified** score counts\n"
-        "Missing teammate score = **0** (team stays active)\n"
+        "Missing partner score = **0** (entry stays active)\n"
         "Late scores need **staff approval**\n"
-        f"**Week {CAPTAIN_BURDEN_WEEK} Captain's Burden:** Captain + (Teammate × 2)\n"
+        f"**Week {CAPTAIN_BURDEN_WEEK} Captain's Burden** (Classic / Arcade only): "
+        "Captain + (Teammate × 2)\n"
         "Registration via Sesh · staff import teams after close"
     )
     embed = base_embed(
@@ -453,7 +508,7 @@ def build_announce_embed(
         pills = pill_line(f"WEEK {week_n} CLOSED", "LATES NEED APPROVAL")
     elif style == "burden" or (burden and style == "week_open"):
         title = f"Captain's Burden · Week {week_n}"
-        pills = pill_line("CAPTAIN + TEAMMATE × 2", f"WEEK {week_n}")
+        pills = pill_line("CLASSIC / ARCADE", "CAPTAIN + TEAMMATE × 2", "FUSION: BOTH CAPTAINS")
     else:
         title = "Official announcement"
         pills = pill_line(season_name(state), f"WEEK {week_n}", status_label(status_raw).replace("● ", "").replace("○ ", ""))
@@ -477,7 +532,10 @@ def build_announce_embed(
     if burden:
         embed.add_field(
             name="Captain's Burden",
-            value="**ACTIVE** — Captain + (Teammate × 2)",
+            value=(
+                "**ACTIVE** for Classic / Arcade — Captain + (Teammate × 2).\n"
+                "**Fusion:** both captains (no teammate) — plain sum, no Burden bonus."
+            ),
             inline=False,
         )
     embed.set_footer(text=footer_rs4l("RS TOURNEY BOT · ANNOUNCEMENT"))

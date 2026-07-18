@@ -50,7 +50,7 @@ def register_player_commands(
         else:
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @tourney.command(name="my-team", description="Your team, division, captain/teammate")
+    @tourney.command(name="my-team", description="Your team, division, roster")
     async def my_team(interaction: discord.Interaction) -> None:
         state = get_state()
         team = find_team_by_user(state, interaction.user.id)
@@ -70,11 +70,20 @@ def register_player_commands(
 
             week_n = int(state.get("season", {}).get("current_week") or 1)
             subs = state.get("submissions") or []
+            div_key = (team.get("division") or "").lower()
             bd = team_week_breakdown(
-                subs, team.get("captain_user_id"), team.get("teammate_user_id"), week_n
+                subs,
+                team.get("captain_user_id"),
+                team.get("teammate_user_id"),
+                week_n,
+                division=div_key,
             )
             season_tot = team_season_total(
-                subs, team.get("captain_user_id"), team.get("teammate_user_id"), through_week=week_n
+                subs,
+                team.get("captain_user_id"),
+                team.get("teammate_user_id"),
+                through_week=week_n,
+                division=div_key,
             )
             png = render_team_card(
                 name=team.get("name") or "Team",
@@ -85,6 +94,8 @@ def register_player_commands(
                 week=week_n,
                 burden=bool(bd["captain_burden"]),
                 season_total=season_tot,
+                slot1_label=str(bd.get("slot1_label") or "Captain"),
+                slot2_label=str(bd.get("slot2_label") or "Teammate"),
             )
             files = files_for_embeds(board_discord_file(png, TEAM_CARD_NAME))
         except Exception:
