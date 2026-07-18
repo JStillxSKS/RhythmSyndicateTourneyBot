@@ -17,7 +17,94 @@ from typing import Any
 
 from config import STATE_PATH
 
-ROSTER_PATH = STATE_PATH.parent / "season1_fixed_roster.json"
+# Prefer committed file next to this module (data/ is gitignored on deploy)
+ROSTER_PATH = Path(__file__).resolve().parent / "season1_fixed_roster.json"
+ROSTER_PATH_ALT = STATE_PATH.parent / "season1_fixed_roster.json"
+
+# Hard-coded Season 1 poster lineup (always available even if JSON missing on disk)
+DEFAULT_TEAMS: list[dict[str, Any]] = [
+    {
+        "id": "s1-classic-buttmuncher-dpr",
+        "name": "Buttmuncher & DPR",
+        "division": "classic",
+        "captain": {"display": "Buttmuncher", "discord_id": None, "smash_name": "Buttmuncher", "aka": []},
+        "teammate": {
+            "display": "DPR",
+            "discord_id": None,
+            "smash_name": "DPR",
+            "aka": ["PolyrhythmicPotential", "Poly"],
+        },
+    },
+    {
+        "id": "s1-classic-daubo-godspeeox",
+        "name": "Daubo & Godspeeox",
+        "division": "classic",
+        "captain": {"display": "Daubo", "discord_id": None, "smash_name": "Daubo", "aka": []},
+        "teammate": {"display": "Godspeeox", "discord_id": None, "smash_name": "Godspeeox", "aka": []},
+    },
+    {
+        "id": "s1-classic-js",
+        "name": "JS",
+        "division": "classic",
+        "captain": {
+            "display": "JStill.sKs",
+            "discord_id": None,
+            "smash_name": "JStill.sKs",
+            "aka": ["JStill", "JStillxSKS"],
+        },
+        "teammate": {"display": "Lara", "discord_id": None, "smash_name": "Lara", "aka": []},
+    },
+    {
+        "id": "s1-classic-kegen-mikado",
+        "name": "Kegen & Mikado",
+        "division": "classic",
+        "captain": {"display": "Kegen", "discord_id": None, "smash_name": "Kegen", "aka": []},
+        "teammate": {"display": "Mikado", "discord_id": None, "smash_name": "Mikado", "aka": []},
+    },
+    {
+        "id": "s1-arcade-minahh-dmg",
+        "name": "Minahh223 & D.M.G",
+        "division": "arcade",
+        "captain": {
+            "display": "Minahh223",
+            "discord_id": None,
+            "smash_name": "Minahh223",
+            "aka": ["Minahh"],
+        },
+        "teammate": {
+            "display": "D.M.G",
+            "discord_id": None,
+            "smash_name": "D.M.G",
+            "aka": ["DMG", "D.M.G."],
+        },
+    },
+    {
+        "id": "s1-arcade-julz-tammy",
+        "name": "Julz & Tammy",
+        "division": "arcade",
+        "captain": {"display": "Julz", "discord_id": None, "smash_name": "Julz", "aka": []},
+        "teammate": {"display": "Tammy", "discord_id": None, "smash_name": "Tammy", "aka": []},
+    },
+    {
+        "id": "s1-fusion-victor",
+        "name": "Victor",
+        "division": "fusion",
+        "captain": {
+            "display": "Victor",
+            "discord_id": None,
+            "smash_name": "Victor",
+            "aka": ["Victor.or.Valhalla", "Valhalla"],
+        },
+        "teammate": None,
+    },
+    {
+        "id": "s1-fusion-sleepy",
+        "name": "Sleepy",
+        "division": "fusion",
+        "captain": {"display": "Sleepy", "discord_id": None, "smash_name": "Sleepy", "aka": []},
+        "teammate": None,
+    },
+]
 
 
 def _norm_name(s: str | None) -> str:
@@ -52,14 +139,17 @@ def _slot_to_ids(p: dict[str, Any] | None) -> str | None:
 
 
 def load_fixed_roster_file() -> list[dict[str, Any]]:
-    if not ROSTER_PATH.is_file():
-        return []
-    try:
-        data = json.loads(ROSTER_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"WARNING: fixed roster read failed: {e}")
-        return []
-    return list(data.get("teams") or [])
+    for path in (ROSTER_PATH, ROSTER_PATH_ALT):
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            teams = list(data.get("teams") or [])
+            if teams:
+                return teams
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"WARNING: fixed roster read failed ({path}): {e}")
+    return list(DEFAULT_TEAMS)
 
 
 def roster_entry_to_state_team(entry: dict[str, Any]) -> dict[str, Any]:

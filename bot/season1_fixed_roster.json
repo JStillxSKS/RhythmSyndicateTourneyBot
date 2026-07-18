@@ -1,0 +1,63 @@
+{
+  "season": "Season 1",
+  "locked": true,
+  "note": "Teams fixed for all 4 weeks. Fill discord_id and smash_name once; bot keeps this roster.",
+  "teams": [
+    {
+      "id": "s1-classic-buttmuncher-dpr",
+      "name": "Buttmuncher & DPR",
+      "division": "classic",
+      "captain": { "display": "Buttmuncher", "discord_id": null, "smash_name": null },
+      "teammate": { "display": "DPR", "discord_id": null, "smash_name": null, "aka": ["PolyrhythmicPotential", "Poly"] }
+    },
+    {
+      "id": "s1-classic-daubo-godspeeox",
+      "name": "Daubo & Godspeeox",
+      "division": "classic",
+      "captain": { "display": "Daubo", "discord_id": null, "smash_name": null },
+      "teammate": { "display": "Godspeeox", "discord_id": null, "smash_name": null }
+    },
+    {
+      "id": "s1-classic-js",
+      "name": "JS",
+      "division": "classic",
+      "captain": { "display": "JStill.sKs", "discord_id": null, "smash_name": null, "aka": ["JStill", "JStillxSKS"] },
+      "teammate": { "display": "Lara", "discord_id": null, "smash_name": null }
+    },
+    {
+      "id": "s1-classic-kegen-mikado",
+      "name": "Kegen & Mikado",
+      "division": "classic",
+      "captain": { "display": "Kegen", "discord_id": null, "smash_name": null },
+      "teammate": { "display": "Mikado", "discord_id": null, "smash_name": null }
+    },
+    {
+      "id": "s1-arcade-minahh-dmg",
+      "name": "Minahh223 & D.M.G",
+      "division": "arcade",
+      "captain": { "display": "Minahh223", "discord_id": null, "smash_name": null, "aka": ["Minahh"] },
+      "teammate": { "display": "D.M.G", "discord_id": null, "smash_name": null, "aka": ["DMG", "D.M.G."] }
+    },
+    {
+      "id": "s1-arcade-julz-tammy",
+      "name": "Julz & Tammy",
+      "division": "arcade",
+      "captain": { "display": "Julz", "discord_id": null, "smash_name": null },
+      "teammate": { "display": "Tammy", "discord_id": null, "smash_name": null }
+    },
+    {
+      "id": "s1-fusion-victor",
+      "name": "Victor",
+      "division": "fusion",
+      "captain": { "display": "Victor", "discord_id": null, "smash_name": null, "aka": ["Victor.or.Valhalla", "Valhalla"] },
+      "teammate": null
+    },
+    {
+      "id": "s1-fusion-sleepy",
+      "name": "Sleepy",
+      "division": "fusion",
+      "captain": { "display": "Sleepy", "discord_id": null, "smash_name": null },
+      "teammate": null
+    }
+  ]
+}
