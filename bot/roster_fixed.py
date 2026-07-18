@@ -100,7 +100,7 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         },
         "teammate": {
             "display": "Mikado",
-            "discord_username": None,
+            "discord_username": "Mikado",
             "meta_name": "Mikado",
             "smash_name": "Mikado",
             "discord_id": None,
