@@ -21,70 +21,32 @@ from config import STATE_PATH
 ROSTER_PATH = Path(__file__).resolve().parent / "season1_fixed_roster.json"
 ROSTER_PATH_ALT = STATE_PATH.parent / "season1_fixed_roster.json"
 
-# Hard-coded Season 1 poster lineup + Meta/Discord name map (embed match uses smash/meta/aka)
+# Season 1 poster teams. Per person: display + smash_name; aka only if different.
 DEFAULT_TEAMS: list[dict[str, Any]] = [
     {
         "id": "s1-classic-buttmuncher-dpr",
         "name": "Buttmuncher & DPR",
         "division": "classic",
-        "captain": {
-            "display": "Buttmuncher",
-            "discord_username": "Buttmuncher",
-            "meta_name": "bootygripper",
-            "smash_name": "bootygripper",
-            "discord_id": None,
-            "aka": ["Buttmuncher", "bootygripper", "Booty"],
-        },
-        "teammate": {
-            "display": "DPR",
-            "discord_username": "DPR",
-            "meta_name": "DPR",
-            "smash_name": "DPR",
-            "discord_id": None,
-            "aka": ["DPR", "PolyrhythmicPotential", "Poly"],
-        },
+        "captain": {"display": "Buttmuncher", "smash_name": "bootygripper", "aka": ["Buttmuncher"]},
+        "teammate": {"display": "DPR", "smash_name": "DPR"},
     },
     {
         "id": "s1-classic-daubo-godspeeox",
         "name": "Daubo & Godspeeox",
         "division": "classic",
-        "captain": {
-            "display": "Daubo",
-            "discord_username": "Daubo",
-            "meta_name": "Daubo",
-            "smash_name": "Daubo",
-            "discord_id": None,
-            "aka": ["Daubo"],
-        },
+        "captain": {"display": "Daubo", "smash_name": "Daubo"},
         "teammate": {
             "display": "Godspeeox",
-            "discord_username": "GodSpeedx0",
-            "meta_name": "Michael Harris",
             "smash_name": "Michael Harris",
-            "discord_id": None,
-            "aka": ["Godspeeox", "GodSpeedx0", "Michael Harris"],
+            "aka": ["GodSpeedx0", "Godspeeox"],
         },
     },
     {
         "id": "s1-classic-js",
         "name": "JS",
         "division": "classic",
-        "captain": {
-            "display": "JStill.sKs",
-            "discord_username": "JStill.sKs",
-            "meta_name": "JStill.sKs",
-            "smash_name": "JStill.sKs",
-            "discord_id": None,
-            "aka": ["JStill", "JStillxSKS", "JStill.sKs"],
-        },
-        "teammate": {
-            "display": "Lara",
-            "discord_username": "rapidax",
-            "meta_name": "Lara",
-            "smash_name": "Lara",
-            "discord_id": None,
-            "aka": ["Lara", "rapidax"],
-        },
+        "captain": {"display": "JStill.sKs", "smash_name": "JStill.sKs"},
+        "teammate": {"display": "Lara", "smash_name": "Lara", "aka": ["rapidax"]},
     },
     {
         "id": "s1-classic-kegen-mikado",
@@ -92,20 +54,10 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "division": "classic",
         "captain": {
             "display": "Kegen",
-            "discord_username": "redknight56",
-            "meta_name": "Kegen Brooks",
             "smash_name": "Kegen Brooks",
-            "discord_id": None,
-            "aka": ["Kegen", "Kegen Brooks", "redknight56"],
+            "aka": ["redknight56", "Kegen"],
         },
-        "teammate": {
-            "display": "Mikado",
-            "discord_username": "Mikado",
-            "meta_name": "Mikado",
-            "smash_name": "Mikado",
-            "discord_id": None,
-            "aka": ["Mikado"],
-        },
+        "teammate": {"display": "Mikado", "smash_name": "Mikado"},
     },
     {
         "id": "s1-arcade-minahh-dmg",
@@ -113,40 +65,20 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "division": "arcade",
         "captain": {
             "display": "Minahh223",
-            "discord_username": "Minahh223",
-            "meta_name": "minah_223",
             "smash_name": "minah_223",
-            "discord_id": None,
-            "aka": ["Minahh223", "minah_223", "Minahh"],
+            "aka": ["Minahh223"],
         },
-        "teammate": {
-            "display": "D.M.G",
-            "discord_username": "CurtDeezy",
-            "meta_name": "D.M.G",
-            "smash_name": "D.M.G",
-            "discord_id": None,
-            "aka": ["D.M.G", "DMG", "D.M.G.", "CurtDeezy"],
-        },
+        "teammate": {"display": "D.M.G", "smash_name": "D.M.G", "aka": ["CurtDeezy"]},
     },
     {
         "id": "s1-arcade-julz-tammy",
         "name": "Julz & Tammy",
         "division": "arcade",
-        "captain": {
-            "display": "Julz",
-            "discord_username": "Julz",
-            "meta_name": "Julz",
-            "smash_name": "Julz",
-            "discord_id": None,
-            "aka": ["Julz"],
-        },
+        "captain": {"display": "Julz", "smash_name": "Julz"},
         "teammate": {
             "display": "Tammy",
-            "discord_username": "TJ RS4L",
-            "meta_name": "Tammy Jensen",
             "smash_name": "Tammy Jensen",
-            "discord_id": None,
-            "aka": ["Tammy", "Tammy Jensen", "TJ RS4L", "TJ"],
+            "aka": ["TJ RS4L", "Tammy"],
         },
     },
     {
@@ -155,17 +87,8 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "division": "fusion",
         "captain": {
             "display": "Victor",
-            "discord_username": "BeastMaster",
-            "meta_name": "Victory.or.Valhalla",
             "smash_name": "Victory.or.Valhalla",
-            "discord_id": None,
-            "aka": [
-                "Victor",
-                "Valhalla",
-                "Victor.or.Valhalla",
-                "Victory.or.Valhalla",
-                "BeastMaster",
-            ],
+            "aka": ["BeastMaster", "Victor", "Valhalla"],
         },
         "teammate": None,
     },
@@ -173,14 +96,7 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "id": "s1-fusion-sleepy",
         "name": "Sleepy",
         "division": "fusion",
-        "captain": {
-            "display": "Sleepy",
-            "discord_username": "Gangstaofluv",
-            "meta_name": "Sleepy",
-            "smash_name": "Sleepy",
-            "discord_id": None,
-            "aka": ["Sleepy", "Gangstaofluv"],
-        },
+        "captain": {"display": "Sleepy", "smash_name": "Sleepy", "aka": ["Gangstaofluv"]},
         "teammate": None,
     },
 ]
@@ -195,16 +111,28 @@ def _norm_name(s: str | None) -> str:
 
 
 def _player_aliases(p: dict[str, Any] | None) -> list[str]:
+    """Unique names only — no four copies of the same string."""
     if not p:
         return []
+    seen: set[str] = set()
     out: list[str] = []
-    for key in ("smash_name", "meta_name", "display", "discord_username"):
+    for key in ("smash_name", "display"):
         v = p.get(key)
-        if v:
-            out.append(str(v))
+        if not v:
+            continue
+        s = str(v).strip()
+        k = s.lower()
+        if s and k not in seen:
+            seen.add(k)
+            out.append(s)
     for a in p.get("aka") or []:
-        if a:
-            out.append(str(a))
+        if not a:
+            continue
+        s = str(a).strip()
+        k = s.lower()
+        if s and k not in seen:
+            seen.add(k)
+            out.append(s)
     return out
 
 
@@ -247,14 +175,14 @@ def roster_entry_to_state_team(entry: dict[str, Any]) -> dict[str, Any]:
                 "display": cap.get("display"),
                 "smash_name": cap.get("smash_name") or cap.get("display"),
                 "discord_id": _slot_to_ids(cap),
-                "aka": list(cap.get("aka") or []),
+                "aka": _player_aliases(cap),
             },
             "teammate": (
                 {
                     "display": mate.get("display"),
                     "smash_name": mate.get("smash_name") or mate.get("display"),
                     "discord_id": _slot_to_ids(mate),
-                    "aka": list(mate.get("aka") or []),
+                    "aka": _player_aliases(mate),
                 }
                 if mate
                 else None

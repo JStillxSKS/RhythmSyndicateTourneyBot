@@ -1,133 +1,49 @@
 {
   "season": "Season 1",
   "locked": true,
-  "note": "Teams fixed 4 weeks. smash/meta names match score embeds; discord names for ops.",
+  "note": "One primary name per person (smash/embed). Extra aka only when different.",
   "teams": [
     {
       "id": "s1-classic-buttmuncher-dpr",
       "name": "Buttmuncher & DPR",
       "division": "classic",
-      "captain": {
-        "display": "Buttmuncher",
-        "discord_username": "Buttmuncher",
-        "meta_name": "bootygripper",
-        "smash_name": "bootygripper",
-        "discord_id": null,
-        "aka": ["Buttmuncher", "bootygripper", "Booty"]
-      },
-      "teammate": {
-        "display": "DPR",
-        "discord_username": "DPR",
-        "meta_name": "DPR",
-        "smash_name": "DPR",
-        "discord_id": null,
-        "aka": ["DPR", "PolyrhythmicPotential", "Poly"]
-      }
+      "captain": { "display": "Buttmuncher", "smash_name": "bootygripper", "aka": ["Buttmuncher"] },
+      "teammate": { "display": "DPR", "smash_name": "DPR" }
     },
     {
       "id": "s1-classic-daubo-godspeeox",
       "name": "Daubo & Godspeeox",
       "division": "classic",
-      "captain": {
-        "display": "Daubo",
-        "discord_username": "Daubo",
-        "meta_name": "Daubo",
-        "smash_name": "Daubo",
-        "discord_id": null,
-        "aka": ["Daubo"]
-      },
-      "teammate": {
-        "display": "Godspeeox",
-        "discord_username": "GodSpeedx0",
-        "meta_name": "Michael Harris",
-        "smash_name": "Michael Harris",
-        "discord_id": null,
-        "aka": ["Godspeeox", "GodSpeedx0", "GodSpeedx0", "Michael Harris"]
-      }
+      "captain": { "display": "Daubo", "smash_name": "Daubo" },
+      "teammate": { "display": "Godspeeox", "smash_name": "Michael Harris", "aka": ["GodSpeedx0", "Godspeeox"] }
     },
     {
       "id": "s1-classic-js",
       "name": "JS",
       "division": "classic",
-      "captain": {
-        "display": "JStill.sKs",
-        "discord_username": "JStill.sKs",
-        "meta_name": "JStill.sKs",
-        "smash_name": "JStill.sKs",
-        "discord_id": null,
-        "aka": ["JStill", "JStillxSKS", "JStill.sKs"]
-      },
-      "teammate": {
-        "display": "Lara",
-        "discord_username": "rapidax",
-        "meta_name": "Lara",
-        "smash_name": "Lara",
-        "discord_id": null,
-        "aka": ["Lara", "rapidax"]
-      }
+      "captain": { "display": "JStill.sKs", "smash_name": "JStill.sKs" },
+      "teammate": { "display": "Lara", "smash_name": "Lara", "aka": ["rapidax"] }
     },
     {
       "id": "s1-classic-kegen-mikado",
       "name": "Kegen & Mikado",
       "division": "classic",
-      "captain": {
-        "display": "Kegen",
-        "discord_username": "redknight56",
-        "meta_name": "Kegen Brooks",
-        "smash_name": "Kegen Brooks",
-        "discord_id": null,
-        "aka": ["Kegen", "Kegen Brooks", "redknight56"]
-      },
-      "teammate": {
-        "display": "Mikado",
-        "discord_username": "Mikado",
-        "meta_name": "Mikado",
-        "smash_name": "Mikado",
-        "discord_id": null,
-        "aka": ["Mikado"]
-      }
+      "captain": { "display": "Kegen", "smash_name": "Kegen Brooks", "aka": ["redknight56", "Kegen"] },
+      "teammate": { "display": "Mikado", "smash_name": "Mikado" }
     },
     {
       "id": "s1-arcade-minahh-dmg",
       "name": "Minahh223 & D.M.G",
       "division": "arcade",
-      "captain": {
-        "display": "Minahh223",
-        "discord_username": "Minahh223",
-        "meta_name": "minah_223",
-        "smash_name": "minah_223",
-        "discord_id": null,
-        "aka": ["Minahh223", "minah_223", "Minahh"]
-      },
-      "teammate": {
-        "display": "D.M.G",
-        "discord_username": "CurtDeezy",
-        "meta_name": "D.M.G",
-        "smash_name": "D.M.G",
-        "discord_id": null,
-        "aka": ["D.M.G", "DMG", "D.M.G.", "CurtDeezy"]
-      }
+      "captain": { "display": "Minahh223", "smash_name": "minah_223", "aka": ["Minahh223"] },
+      "teammate": { "display": "D.M.G", "smash_name": "D.M.G", "aka": ["CurtDeezy"] }
     },
     {
       "id": "s1-arcade-julz-tammy",
       "name": "Julz & Tammy",
       "division": "arcade",
-      "captain": {
-        "display": "Julz",
-        "discord_username": "Julz",
-        "meta_name": "Julz",
-        "smash_name": "Julz",
-        "discord_id": null,
-        "aka": ["Julz"]
-      },
-      "teammate": {
-        "display": "Tammy",
-        "discord_username": "TJ RS4L",
-        "meta_name": "Tammy Jensen",
-        "smash_name": "Tammy Jensen",
-        "discord_id": null,
-        "aka": ["Tammy", "Tammy Jensen", "TJ RS4L", "TJ"]
-      }
+      "captain": { "display": "Julz", "smash_name": "Julz" },
+      "teammate": { "display": "Tammy", "smash_name": "Tammy Jensen", "aka": ["TJ RS4L", "Tammy"] }
     },
     {
       "id": "s1-fusion-victor",
@@ -135,11 +51,8 @@
       "division": "fusion",
       "captain": {
         "display": "Victor",
-        "discord_username": "BeastMaster",
-        "meta_name": "Victory.or.Valhalla",
         "smash_name": "Victory.or.Valhalla",
-        "discord_id": null,
-        "aka": ["Victor", "Valhalla", "Victor.or.Valhalla", "Victory.or.Valhalla", "BeastMaster"]
+        "aka": ["BeastMaster", "Victor", "Valhalla"]
       },
       "teammate": null
     },
@@ -147,14 +60,7 @@
       "id": "s1-fusion-sleepy",
       "name": "Sleepy",
       "division": "fusion",
-      "captain": {
-        "display": "Sleepy",
-        "discord_username": "Gangstaofluv",
-        "meta_name": "Sleepy",
-        "smash_name": "Sleepy",
-        "discord_id": null,
-        "aka": ["Sleepy", "Gangstaofluv"]
-      },
+      "captain": { "display": "Sleepy", "smash_name": "Sleepy", "aka": ["Gangstaofluv"] },
       "teammate": null
     }
   ]
