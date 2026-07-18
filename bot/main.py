@@ -156,6 +156,13 @@ async def on_message(message: discord.Message) -> None:
     from state import find_team_by_user
 
     team = find_team_by_user(state, message.author.id)
+    if not team:
+        try:
+            from roster_fixed import find_team_by_smash_or_display
+
+            team = find_team_by_smash_or_display(state, data.get("playerName"))
+        except Exception:
+            pass
     mode = data.get("gameMode")
     mode_note = ""
     if team and mode and team.get("division") and mode != team.get("division"):
@@ -168,6 +175,15 @@ async def on_message(message: discord.Message) -> None:
     score_achieved_at = provenance["score_achieved_at"]
     score_source = provenance.get("score_source") or "message.created_at"
 
+    meta = {
+        "title": data.get("title"),
+        "artist": data.get("artist"),
+        "gameMode": data.get("gameMode"),
+        "difficulty": data.get("difficulty"),
+        "playerName": data.get("playerName"),
+        "team_division": team.get("division") if team else None,
+        "score_time_evidence": provenance.get("evidence") or [],
+    }
     sub, status = record_submission(
         state,
         user_id=message.author.id,
@@ -178,15 +194,7 @@ async def on_message(message: discord.Message) -> None:
         submitted_at=submitted_at,
         score_achieved_at=score_achieved_at,
         score_time_source=str(score_source),
-        meta={
-            "title": data.get("title"),
-            "artist": data.get("artist"),
-            "gameMode": data.get("gameMode"),
-            "difficulty": data.get("difficulty"),
-            "playerName": data.get("playerName"),
-            "team_division": team.get("division") if team else None,
-            "score_time_evidence": provenance.get("evidence") or [],
-        },
+        meta=meta,
     )
     from dashboard import build_submission_reply_embed, logo_file
     from theme import SCORE_FLASH_NAME, files_for_embeds

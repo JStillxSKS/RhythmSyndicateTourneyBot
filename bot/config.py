@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Bump on every deploy-critical fix so /tourney help proves which build is live.
-BOT_VERSION = "2026-07-18-fusion-both-captains-v1"
+BOT_VERSION = "2026-07-18-fixed-roster-v1"
 
 # Automation (env: "0"/"false"/"off" to disable)
 def _env_bool(name: str, default: bool = True) -> bool:

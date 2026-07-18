@@ -295,8 +295,19 @@ def record_submission(
     Staff verified=True / approved_by still overrides (manual set / approve).
     """
     team = find_team_by_user(state, user_id)
+    # Fixed Season 1 roster: also match Smash / display name on the score embed
+    if not team and meta:
+        try:
+            from roster_fixed import find_team_by_smash_or_display
+
+            team = find_team_by_smash_or_display(state, meta.get("playerName"))
+        except Exception:
+            team = None
     if not team:
-        return None, "You are not on a registered tournament team."
+        return None, (
+            "Could not match this score to a Season 1 team "
+            "(Discord account or Smash name on the embed)."
+        )
 
     week_n = int(week if week is not None else state.get("season", {}).get("current_week") or 1)
     if week_n < 1:

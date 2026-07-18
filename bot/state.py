@@ -81,14 +81,23 @@ def _merge_shape(data: dict[str, Any]) -> dict[str, Any]:
 def load_state() -> dict[str, Any]:
     with _state_lock:
         if not STATE_PATH.is_file():
-            return empty_state()
+            state = empty_state()
+        else:
+            try:
+                with open(STATE_PATH, encoding="utf-8") as f:
+                    data = json.load(f)
+                state = _merge_shape(data if isinstance(data, dict) else {})
+            except (OSError, json.JSONDecodeError) as e:
+                print(f"WARNING: could not read state: {e}")
+                state = empty_state()
+        # Season 1: teams are fixed for 4 weeks — ensure poster roster is present
         try:
-            with open(STATE_PATH, encoding="utf-8") as f:
-                data = json.load(f)
-            return _merge_shape(data if isinstance(data, dict) else {})
-        except (OSError, json.JSONDecodeError) as e:
-            print(f"WARNING: could not read state: {e}")
-            return empty_state()
+            from roster_fixed import ensure_fixed_roster
+
+            state = ensure_fixed_roster(state, persist=False)
+        except Exception as e:
+            print(f"WARNING: fixed roster ensure failed: {e}")
+        return state
 
 
 def save_state(state: dict[str, Any]) -> None:

@@ -16,8 +16,7 @@ def parse_import_payload(text: str) -> list[dict[str, str]]:
     Accept:
       - JSON array of objects
       - CSV with header: team_name,division,captain_id,teammate_id
-        (aliases: name, captain, teammate, captain_a_id, captain_b_id, …)
-    Always a duo — Fusion still needs both IDs (both captains; no teammate / no Burden).
+    Classic/Arcade need both IDs. Fusion may be solo (1v1) with captain only.
     """
     raw = (text or "").strip()
     if not raw:
@@ -33,7 +32,6 @@ def parse_import_payload(text: str) -> list[dict[str, str]]:
             rows.append({str(k).lower(): str(v).strip() for k, v in item.items() if v is not None})
         return rows
 
-    # CSV
     f = io.StringIO(raw)
     sample = raw[:200]
     try:
@@ -62,9 +60,7 @@ def _strip_mention(val: str) -> str:
 
 
 def import_teams(state: dict[str, Any], text: str) -> tuple[list[str], list[str]]:
-    """
-    Returns (ok_lines, error_lines). Mutates state teams list; caller saves.
-    """
+    """Returns (ok_lines, error_lines). Mutates state teams list; caller saves."""
     rows = parse_import_payload(text)
     ok: list[str] = []
     err: list[str] = []
@@ -98,11 +94,8 @@ def import_teams(state: dict[str, Any], text: str) -> tuple[list[str], list[str]
             )
         )
 
-        if not name or not div_raw or not cap or not mate:
-            err.append(
-                f"Row {i}: need team_name, division, and both player IDs "
-                f"(Fusion: both are captains — still a duo, no teammate / no Burden)"
-            )
+        if not name or not div_raw or not cap:
+            err.append(f"Row {i}: need team_name, division, captain_id")
             continue
         div = normalize_division(div_raw)
         if not div:
@@ -110,33 +103,39 @@ def import_teams(state: dict[str, Any], text: str) -> tuple[list[str], list[str]
             continue
 
         slot1, slot2 = roster_labels(div)
+        fusion_solo = div == "fusion" and not mate
 
-        if not cap.isdigit() or not mate.isdigit():
-            err.append(f"Row {i} ({name}): player IDs must be Discord user IDs")
+        if not cap.isdigit():
+            err.append(f"Row {i} ({name}): captain ID must be Discord user ID")
             continue
-        if cap == mate:
-            err.append(f"Row {i} ({name}): {slot1} and {slot2} must differ")
-            continue
+        if not fusion_solo:
+            if not mate or not mate.isdigit():
+                err.append(f"Row {i} ({name}): need both player IDs for {div}")
+                continue
+            if cap == mate:
+                err.append(f"Row {i} ({name}): {slot1} and {slot2} must differ")
+                continue
         if find_team_by_name(state, name):
             err.append(f"Row {i} ({name}): team name already exists")
             continue
         if find_team_by_user(state, int(cap)):
             err.append(f"Row {i} ({name}): {slot1} already on a team")
             continue
-        if find_team_by_user(state, int(mate)):
+        if mate and mate.isdigit() and find_team_by_user(state, int(mate)):
             err.append(f"Row {i} ({name}): {slot2} already on a team")
             continue
         team = {
             "id": new_team_id(),
             "name": name.strip(),
             "division": div,
-            # Slot storage; Fusion UI labels both as captains (no Burden teammate).
             "captain_user_id": str(int(cap)),
-            "teammate_user_id": str(int(mate)),
+            "teammate_user_id": str(int(mate)) if mate and mate.isdigit() else None,
             "active": True,
         }
         state.setdefault("teams", []).append(team)
-        if not division_has_captain_role(div):
+        if fusion_solo:
+            ok.append(f"**{team['name']}** ({div}, solo) `{team['id']}`")
+        elif not division_has_captain_role(div):
             ok.append(f"**{team['name']}** ({div}, both captains) `{team['id']}`")
         else:
             ok.append(f"**{team['name']}** ({div}) `{team['id']}`")

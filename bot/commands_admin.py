@@ -224,14 +224,14 @@ def register_admin_commands(
 
     @team_grp.command(
         name="add",
-        description="Add a duo team (Fusion: both captains — no Burden bonus)",
+        description="Add a team (Classic/Arcade duo · Fusion duo or solo 1v1)",
     )
     @admin_check()
     @app_commands.describe(
         name="Team name",
         division="classic | fusion | arcade",
-        captain="Classic/Arcade: Captain · Fusion: Captain A (both are captains)",
-        teammate="Classic/Arcade: Teammate · Fusion: Captain B (required duo — no teammate role)",
+        captain="Classic/Arcade: Captain · Fusion: player (or Captain A)",
+        teammate="Classic/Arcade: required · Fusion: optional (omit for 1v1 solo)",
     )
     @app_commands.choices(
         division=[
@@ -245,7 +245,7 @@ def register_admin_commands(
         name: str,
         division: app_commands.Choice[str],
         captain: discord.Member,
-        teammate: discord.Member,
+        teammate: discord.Member | None = None,
     ) -> None:
         from rules import division_has_captain_role, roster_labels
 
@@ -258,7 +258,13 @@ def register_admin_commands(
             return
         has_cap = division_has_captain_role(div)
         slot1, slot2 = roster_labels(div)
-        if captain.id == teammate.id:
+        if div != "fusion" and teammate is None:
+            await interaction.response.send_message(
+                "Classic and Arcade need both players.",
+                ephemeral=True,
+            )
+            return
+        if teammate is not None and captain.id == teammate.id:
             await interaction.response.send_message(
                 f"{slot1} and {slot2} must be different people.",
                 ephemeral=True,
@@ -269,7 +275,7 @@ def register_admin_commands(
                 "A team with that name already exists.", ephemeral=True
             )
             return
-        for uid in (captain.id, teammate.id):
+        for uid in (captain.id, *( [teammate.id] if teammate else [] )):
             if find_team_by_user(state, uid):
                 await interaction.response.send_message(
                     f"<@{uid}> is already on a team.", ephemeral=True
@@ -279,27 +285,29 @@ def register_admin_commands(
             "id": new_team_id(),
             "name": name.strip(),
             "division": div,
-            # Storage slots only — Fusion displays both as captains (no teammate / no Burden).
             "captain_user_id": str(captain.id),
-            "teammate_user_id": str(teammate.id),
+            "teammate_user_id": str(teammate.id) if teammate else None,
             "active": True,
         }
         state.setdefault("teams", []).append(team)
         save_state(state)
-        note = (
-            " · Fusion — both captains (no teammate / no Burden bonus)."
-            if not has_cap
-            else "."
-        )
+        if div == "fusion" and teammate is None:
+            note = " · Fusion 1v1 solo (no Burden)."
+        elif not has_cap:
+            note = " · Fusion — both captains (no Burden)."
+        else:
+            note = "."
+        fields = {
+            slot1.lower().replace(" ", "_"): captain.mention,
+            "id": f"`{team['id']}`",
+        }
+        if teammate:
+            fields[slot2.lower().replace(" ", "_")] = teammate.mention
         embed = build_admin_ok_embed(
             "Team added",
             f"**{team['name']}** registered{note}",
             division=DIVISION_LABELS[div],
-            **{
-                slot1.lower().replace(" ", "_"): captain.mention,
-                slot2.lower().replace(" ", "_"): teammate.mention,
-                "id": f"`{team['id']}`",
-            },
+            **fields,
         )
         file = logo_file()
         if file:
@@ -440,9 +448,10 @@ def register_admin_commands(
             c, m = t.get("captain_user_id"), t.get("teammate_user_id")
             if division_has_captain_role(div_key):
                 roster = f"C <@{c}> · T <@{m}>"
-            else:
-                # Fusion: both captains (still a duo; no teammate / no Burden)
+            elif m:
                 roster = f"C·A <@{c}> · C·B <@{m}>"
+            else:
+                roster = f"solo <@{c}>"
             lines.append(f"**{t.get('name')}** ({div}) · {roster} · `{t.get('id')}`")
         text = "\n".join(lines)
         if len(text) > 1900:
