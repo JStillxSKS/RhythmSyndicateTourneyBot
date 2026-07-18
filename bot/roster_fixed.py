@@ -57,7 +57,11 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
             "smash_name": "Kegen Brooks",
             "aka": ["redknight56", "Kegen"],
         },
-        "teammate": {"display": "Mikado", "smash_name": "Mikado"},
+        "teammate": {
+            "display": "Mikado",
+            "smash_name": "DuragonMikado",
+            "aka": ["Duragon Mikado", "Mikado"],
+        },
     },
     {
         "id": "s1-arcade-minahh-dmg",
