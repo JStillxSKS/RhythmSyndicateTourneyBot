@@ -21,26 +21,49 @@ from config import STATE_PATH
 ROSTER_PATH = Path(__file__).resolve().parent / "season1_fixed_roster.json"
 ROSTER_PATH_ALT = STATE_PATH.parent / "season1_fixed_roster.json"
 
-# Hard-coded Season 1 poster lineup (always available even if JSON missing on disk)
+# Hard-coded Season 1 poster lineup + Meta/Discord name map (embed match uses smash/meta/aka)
 DEFAULT_TEAMS: list[dict[str, Any]] = [
     {
         "id": "s1-classic-buttmuncher-dpr",
         "name": "Buttmuncher & DPR",
         "division": "classic",
-        "captain": {"display": "Buttmuncher", "discord_id": None, "smash_name": "Buttmuncher", "aka": []},
+        "captain": {
+            "display": "Buttmuncher",
+            "discord_username": "Buttmuncher",
+            "meta_name": "bootygripper",
+            "smash_name": "bootygripper",
+            "discord_id": None,
+            "aka": ["Buttmuncher", "bootygripper", "Booty"],
+        },
         "teammate": {
             "display": "DPR",
-            "discord_id": None,
+            "discord_username": "DPR",
+            "meta_name": "DPR",
             "smash_name": "DPR",
-            "aka": ["PolyrhythmicPotential", "Poly"],
+            "discord_id": None,
+            "aka": ["DPR", "PolyrhythmicPotential", "Poly"],
         },
     },
     {
         "id": "s1-classic-daubo-godspeeox",
         "name": "Daubo & Godspeeox",
         "division": "classic",
-        "captain": {"display": "Daubo", "discord_id": None, "smash_name": "Daubo", "aka": []},
-        "teammate": {"display": "Godspeeox", "discord_id": None, "smash_name": "Godspeeox", "aka": []},
+        "captain": {
+            "display": "Daubo",
+            "discord_username": "Daubo",
+            "meta_name": "Daubo",
+            "smash_name": "Daubo",
+            "discord_id": None,
+            "aka": ["Daubo"],
+        },
+        "teammate": {
+            "display": "Godspeeox",
+            "discord_username": "GodSpeedx0",
+            "meta_name": "Michael Harris",
+            "smash_name": "Michael Harris",
+            "discord_id": None,
+            "aka": ["Godspeeox", "GodSpeedx0", "Michael Harris"],
+        },
     },
     {
         "id": "s1-classic-js",
@@ -48,18 +71,41 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "division": "classic",
         "captain": {
             "display": "JStill.sKs",
-            "discord_id": None,
+            "discord_username": "JStill.sKs",
+            "meta_name": "JStill.sKs",
             "smash_name": "JStill.sKs",
-            "aka": ["JStill", "JStillxSKS"],
+            "discord_id": None,
+            "aka": ["JStill", "JStillxSKS", "JStill.sKs"],
         },
-        "teammate": {"display": "Lara", "discord_id": None, "smash_name": "Lara", "aka": []},
+        "teammate": {
+            "display": "Lara",
+            "discord_username": "rapidax",
+            "meta_name": "Lara",
+            "smash_name": "Lara",
+            "discord_id": None,
+            "aka": ["Lara", "rapidax"],
+        },
     },
     {
         "id": "s1-classic-kegen-mikado",
         "name": "Kegen & Mikado",
         "division": "classic",
-        "captain": {"display": "Kegen", "discord_id": None, "smash_name": "Kegen", "aka": []},
-        "teammate": {"display": "Mikado", "discord_id": None, "smash_name": "Mikado", "aka": []},
+        "captain": {
+            "display": "Kegen",
+            "discord_username": "redknight56",
+            "meta_name": "Kegen Brooks",
+            "smash_name": "Kegen Brooks",
+            "discord_id": None,
+            "aka": ["Kegen", "Kegen Brooks", "redknight56"],
+        },
+        "teammate": {
+            "display": "Mikado",
+            "discord_username": None,
+            "meta_name": "Mikado",
+            "smash_name": "Mikado",
+            "discord_id": None,
+            "aka": ["Mikado"],
+        },
     },
     {
         "id": "s1-arcade-minahh-dmg",
@@ -67,23 +113,41 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "division": "arcade",
         "captain": {
             "display": "Minahh223",
+            "discord_username": "Minahh223",
+            "meta_name": "minah_223",
+            "smash_name": "minah_223",
             "discord_id": None,
-            "smash_name": "Minahh223",
-            "aka": ["Minahh"],
+            "aka": ["Minahh223", "minah_223", "Minahh"],
         },
         "teammate": {
             "display": "D.M.G",
-            "discord_id": None,
+            "discord_username": "CurtDeezy",
+            "meta_name": "D.M.G",
             "smash_name": "D.M.G",
-            "aka": ["DMG", "D.M.G."],
+            "discord_id": None,
+            "aka": ["D.M.G", "DMG", "D.M.G.", "CurtDeezy"],
         },
     },
     {
         "id": "s1-arcade-julz-tammy",
         "name": "Julz & Tammy",
         "division": "arcade",
-        "captain": {"display": "Julz", "discord_id": None, "smash_name": "Julz", "aka": []},
-        "teammate": {"display": "Tammy", "discord_id": None, "smash_name": "Tammy", "aka": []},
+        "captain": {
+            "display": "Julz",
+            "discord_username": "Julz",
+            "meta_name": "Julz",
+            "smash_name": "Julz",
+            "discord_id": None,
+            "aka": ["Julz"],
+        },
+        "teammate": {
+            "display": "Tammy",
+            "discord_username": "TJ RS4L",
+            "meta_name": "Tammy Jensen",
+            "smash_name": "Tammy Jensen",
+            "discord_id": None,
+            "aka": ["Tammy", "Tammy Jensen", "TJ RS4L", "TJ"],
+        },
     },
     {
         "id": "s1-fusion-victor",
@@ -91,9 +155,17 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "division": "fusion",
         "captain": {
             "display": "Victor",
+            "discord_username": "BeastMaster",
+            "meta_name": "Victory.or.Valhalla",
+            "smash_name": "Victory.or.Valhalla",
             "discord_id": None,
-            "smash_name": "Victor",
-            "aka": ["Victor.or.Valhalla", "Valhalla"],
+            "aka": [
+                "Victor",
+                "Valhalla",
+                "Victor.or.Valhalla",
+                "Victory.or.Valhalla",
+                "BeastMaster",
+            ],
         },
         "teammate": None,
     },
@@ -101,7 +173,14 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "id": "s1-fusion-sleepy",
         "name": "Sleepy",
         "division": "fusion",
-        "captain": {"display": "Sleepy", "discord_id": None, "smash_name": "Sleepy", "aka": []},
+        "captain": {
+            "display": "Sleepy",
+            "discord_username": "Gangstaofluv",
+            "meta_name": "Sleepy",
+            "smash_name": "Sleepy",
+            "discord_id": None,
+            "aka": ["Sleepy", "Gangstaofluv"],
+        },
         "teammate": None,
     },
 ]
@@ -119,7 +198,7 @@ def _player_aliases(p: dict[str, Any] | None) -> list[str]:
     if not p:
         return []
     out: list[str] = []
-    for key in ("smash_name", "display", "discord_username"):
+    for key in ("smash_name", "meta_name", "display", "discord_username"):
         v = p.get(key)
         if v:
             out.append(str(v))
