@@ -22,17 +22,28 @@
       "name": "JS",
       "division": "classic",
       "captain": { "display": "JStill.sKs", "smash_name": "JStill.sKs" },
-      "teammate": { "display": "Lara", "smash_name": "Lara", "aka": ["rapidax"] }
+      "teammate": {
+        "display": "Lara",
+        "smash_name": "Lara",
+        "hash": "cDPuArtg",
+        "aka": ["rapidax", "Lana", "lara"]
+      }
     },
     {
       "id": "s1-classic-kegen-mikado",
       "name": "Kegen & Mikado",
       "division": "classic",
-      "captain": { "display": "Kegen", "smash_name": "Kegen Brooks", "aka": ["redknight56", "Kegen"] },
+      "captain": {
+        "display": "Kegen",
+        "smash_name": "Kegen Brooks",
+        "hash": "3pWX8nv3",
+        "aka": ["redknight56", "Kegen", "RedKnight56", "Kegen Brooks"]
+      },
       "teammate": {
         "display": "Mikado",
         "smash_name": "DuragonMikado",
-        "aka": ["Duragon Mikado", "Mikado"]
+        "hash": "tcuFmJhj",
+        "aka": ["Duragon Mikado", "Mikado", "DuragonMikado"]
       }
     },
     {
@@ -47,7 +58,12 @@
       "name": "Julz & Tammy",
       "division": "arcade",
       "captain": { "display": "Julz", "smash_name": "Julz" },
-      "teammate": { "display": "Tammy", "smash_name": "Tammy Jensen", "aka": ["TJ RS4L", "Tammy"] }
+      "teammate": {
+        "display": "Tammy",
+        "smash_name": "Tammy Jensen",
+        "hash": "3uKWQR4e",
+        "aka": ["TJ RS4L", "Tammy", "Tammy Jensen"]
+      }
     },
     {
       "id": "s1-fusion-victor",

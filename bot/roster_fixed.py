@@ -46,7 +46,12 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "name": "JS",
         "division": "classic",
         "captain": {"display": "JStill.sKs", "smash_name": "JStill.sKs"},
-        "teammate": {"display": "Lara", "smash_name": "Lara", "aka": ["rapidax"]},
+        "teammate": {
+            "display": "Lara",
+            "smash_name": "Lara",
+            "hash": "cDPuArtg",
+            "aka": ["rapidax", "Lana", "lara"],
+        },
     },
     {
         "id": "s1-classic-kegen-mikado",
@@ -55,12 +60,15 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "captain": {
             "display": "Kegen",
             "smash_name": "Kegen Brooks",
-            "aka": ["redknight56", "Kegen"],
+            # Score-card Meta hash (stable if Smash/Discord name changes)
+            "hash": "3pWX8nv3",
+            "aka": ["redknight56", "Kegen", "RedKnight56", "Kegen Brooks"],
         },
         "teammate": {
             "display": "Mikado",
             "smash_name": "DuragonMikado",
-            "aka": ["Duragon Mikado", "Mikado"],
+            "hash": "tcuFmJhj",
+            "aka": ["Duragon Mikado", "Mikado", "DuragonMikado"],
         },
     },
     {
@@ -82,7 +90,8 @@ DEFAULT_TEAMS: list[dict[str, Any]] = [
         "teammate": {
             "display": "Tammy",
             "smash_name": "Tammy Jensen",
-            "aka": ["TJ RS4L", "Tammy"],
+            "hash": "3uKWQR4e",
+            "aka": ["TJ RS4L", "Tammy", "Tammy Jensen"],
         },
     },
     {
@@ -178,6 +187,7 @@ def roster_entry_to_state_team(entry: dict[str, Any]) -> dict[str, Any]:
             "captain": {
                 "display": cap.get("display"),
                 "smash_name": cap.get("smash_name") or cap.get("display"),
+                "hash": (cap.get("hash") or "").strip() or None,
                 "discord_id": _slot_to_ids(cap),
                 "aka": _player_aliases(cap),
             },
@@ -185,6 +195,7 @@ def roster_entry_to_state_team(entry: dict[str, Any]) -> dict[str, Any]:
                 {
                     "display": mate.get("display"),
                     "smash_name": mate.get("smash_name") or mate.get("display"),
+                    "hash": (mate.get("hash") or "").strip() or None,
                     "discord_id": _slot_to_ids(mate),
                     "aka": _player_aliases(mate),
                 }
@@ -254,6 +265,13 @@ def ensure_fixed_roster(state: dict[str, Any], *, persist: bool = False) -> dict
     return state
 
 
+def _slot_hash(slot: dict[str, Any] | None) -> str | None:
+    if not slot:
+        return None
+    h = (slot.get("hash") or "").strip()
+    return h.lower() if h else None
+
+
 def _name_hits(player_name: str, slot: dict[str, Any] | None) -> bool:
     if not slot or not player_name:
         return False
@@ -269,10 +287,34 @@ def _name_hits(player_name: str, slot: dict[str, Any] | None) -> bool:
     return False
 
 
+def _hash_hits(player_hash: str | None, slot: dict[str, Any] | None) -> bool:
+    """Score-card Meta hash is stable when names change."""
+    if not player_hash or not slot:
+        return False
+    want = player_hash.strip().lower()
+    have = _slot_hash(slot)
+    return bool(want and have and want == have)
+
+
 def find_team_by_smash_or_display(
-    state: dict[str, Any], player_name: str | None
+    state: dict[str, Any],
+    player_name: str | None,
+    player_hash: str | None = None,
 ) -> dict[str, Any] | None:
-    """Match score embed player name to fixed roster smash/display/aka."""
+    """
+    Match score embed to a Season 1 team.
+    Prefer **score-card hash** (stable); fall back to Discord/Smash display names.
+    """
+    # 1) Hash first — rename-proof
+    if player_hash:
+        ph = player_hash.strip().lower()
+        for t in state.get("teams") or []:
+            if not t.get("active", True):
+                continue
+            roster = t.get("roster") or {}
+            if _hash_hits(ph, roster.get("captain")) or _hash_hits(ph, roster.get("teammate")):
+                return t
+
     if not player_name:
         return None
     for t in state.get("teams") or []:
@@ -283,9 +325,6 @@ def find_team_by_smash_or_display(
             return t
         if _name_hits(player_name, roster.get("teammate")):
             return t
-        # fallback: bare display fields if roster block missing
-        if _name_hits(player_name, {"display": t.get("name"), "smash_name": None, "aka": []}):
-            continue
     return None
 
 

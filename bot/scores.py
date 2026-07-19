@@ -41,6 +41,17 @@ def parse_player_name(name: str | None) -> str:
     return re.sub(r"\s*\([^)]+\)\s*$", "", name).strip() or "Unknown"
 
 
+def parse_player_name_and_hash(name: str | None) -> tuple[str, str | None]:
+    """Embed author is often `DisplayName (tcuFmJhj)` — hash is rename-proof."""
+    raw = (name or "").strip()
+    if not raw:
+        return "Unknown", None
+    m = re.match(r"^(.+?)\s*\(([A-Za-z0-9_-]{6,16})\)\s*$", raw)
+    if m:
+        return (m.group(1).strip() or "Unknown"), m.group(2)
+    return parse_player_name(raw), None
+
+
 def is_game_footer(text: str) -> bool:
     t = text.strip().lower()
     return t.startswith("smash drums") or ("quest" in t and bool(re.search(r"\d+\.\d+", t)))
@@ -89,9 +100,15 @@ def parse_embed(embed: discord.Embed) -> dict[str, Any] | None:
         data["artist"] = artist_match.group(1).strip()
 
     if embed.author and embed.author.name:
-        data["playerName"] = parse_player_name(embed.author.name)
+        pname, ph = parse_player_name_and_hash(embed.author.name)
+        data["playerName"] = pname
+        if ph:
+            data["playerHash"] = ph
     elif embed.footer and embed.footer.text and not is_game_footer(embed.footer.text):
-        data["playerName"] = parse_player_name(embed.footer.text)
+        pname, ph = parse_player_name_and_hash(embed.footer.text)
+        data["playerName"] = pname
+        if ph:
+            data["playerHash"] = ph
     else:
         data["playerName"] = "Unknown"
 
@@ -295,18 +312,22 @@ def record_submission(
     Staff verified=True / approved_by still overrides (manual set / approve).
     """
     team = find_team_by_user(state, user_id)
-    # Fixed Season 1 roster: also match Smash / display name on the score embed
+    # Fixed Season 1 roster: score-card hash (preferred) or Discord/Smash display name
     if not team and meta:
         try:
             from roster_fixed import find_team_by_smash_or_display
 
-            team = find_team_by_smash_or_display(state, meta.get("playerName"))
+            team = find_team_by_smash_or_display(
+                state,
+                meta.get("playerName"),
+                meta.get("playerHash"),
+            )
         except Exception:
             team = None
     if not team:
         return None, (
             "Could not match this score to a Season 1 team "
-            "(Discord account or Smash name on the embed)."
+            "(Discord account, score-card hash, or name on the embed)."
         )
 
     week_n = int(week if week is not None else state.get("season", {}).get("current_week") or 1)
